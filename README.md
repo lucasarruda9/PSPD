@@ -1,43 +1,54 @@
-# PSPD - Gateway Módulo P (API REST -> gRPC)
+# PSPD - Pipeline de Processamento de Imagens Médicas
 
-Este repositório contém a implementação do Módulo P, que atua como um API Gateway. Ele recebe requisições HTTP (REST/JSON) externas e as traduz em chamadas gRPC para os Servidores Internos (Módulos A e B).
+## Como Rodar Localmente (Docker)
 
-## Tecnologias Utilizadas
-* **Linguagem:** Python 3
-* **Framework Web:** FastAPI
-* **Comunicação:** gRPC e Protocol Buffers
-
-## Como rodar o projeto localmente
-
-1. Instale e configure as dependências:
-```bash
-sudo apt update
-sudo apt install python3 python3-pip python3-venv -y
-python3 -m venv venv
-source venv/bin/activate
-pip install fastapi uvicorn grpcio grpcio-tools pydantic
-
-```
-
-2. Rode o servidor Web (FastAPI):
+Para rodar a infraestrutura de desenvolvimento contendo o Gateway gRPC, basta executar o comando abaixo na pasta raiz do projeto:
 
 ```bash
-cd modulo_p_gateway
-python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
-uvicorn main:app --reload
-
+docker compose up --build
 ```
 
-3. Acesse:
+O servidor do Gateway (Módulo P) estará disponível em:
+- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
+
+*(Ainda tá faltando os módulos A, B e REST Mirror serão adicionados futuramente ao `docker-compose.yml` quando seus respectivos códigos forem entregues).*
+
+---
+
+## Como Fazer Deploy no Kubernetes (Minikube)
+
+Para provisionar o ambiente completo de produção (incluindo Prometheus, Grafana e Auto-scaling), execute:
+
 ```bash
-http://localhost:8000/docs
+bash infra/scripts/setup-cluster.sh
 ```
-## Onde mexer e o que alterar?
 
-Mexer só no arquivo main e service, os outros 2 são gerados pelo service.proto. Além disso, sempre que mexer no service.proto, rodar:
+As URLs de acesso aos painéis de monitoramento serão exibidas no terminal ao final do script.
 
-```bash
-python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. service.proto
+---
 
-```
-Obs.: Nunca edite os arquivos `_pb2.py`.
+## Desenvolvimento Local
+
+Se você precisar rodar ou debugar o Gateway localmente **fora do Docker**, o projeto usa o gerenciador de pacotes **`uv`** (mais rápido que pip).
+
+1. **Instale o uv** na sua máquina (se não tiver):
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. **Instale as dependências** na pasta `modulo_p_gateway`:
+   ```bash
+   cd modulo_p_gateway
+   uv sync
+   ```
+   *(Isso criará automaticamente o ambiente virtual `.venv` e o arquivo `uv.lock` na sua máquina local).*
+
+3. **Gere os stubs do gRPC:**
+   ```bash
+   uv run python -m grpc_tools.protoc -I../proto --python_out=. --grpc_python_out=. ../proto/image_processing.proto
+   ```
+
+4. **Rode o servidor:**
+   ```bash
+   uv run uvicorn main:app --reload --port 8000
+   ```
