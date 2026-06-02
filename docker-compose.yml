@@ -1,0 +1,16 @@
+services:
+  modulo-p-gateway:
+    build:
+      context: .
+      dockerfile: modulo_p_gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GRPC_SERVER_A=modulo-a-servidor:50051
+      - GRPC_SERVER_B=modulo-b-servidor:50052
+    networks:
+      - pspd-net
+
+networks:
+  pspd-net:
+    driver: bridge
