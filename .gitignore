@@ -1,0 +1,8 @@
+Servidores_GRPC/proto/medimg.pb.go
+Servidores_GRPC/proto/medimg_grpc.pb.go
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
