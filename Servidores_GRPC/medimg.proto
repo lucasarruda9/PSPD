@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package medimg;
+
+option go_package = "./proto";
+
+message Slice {
+  string slice_id = 1;
+  int32  index = 2;
+  bytes  data = 3;
+}
+
+message Metadata {
+  string modality = 1;
+  int32  rows = 2;
+  int32  columns = 3;
+  double slice_thickness = 4;
+  repeated string removed_phi_tags = 5;
+}
+
+
+message AnonymizeRequest {
+  Slice slice = 1;
+}
+
+message AnonymizeResponse {
+  Slice slice = 1;
+  Metadata metadata = 2;  
+}
+
+
+message EnhanceRequest {
+  Slice slice = 1;
+  bool apply_clahe = 2; 
+  bool apply_denoise = 3;  
+  bool apply_normalize = 4;  
+}
+
+message EnhanceResponse {
+  Slice slice = 1; 
+  double processing_ms = 2;  
+}
+
+message ExamSummary {
+  string exam_id = 1;
+  int32 total_slices = 2;
+  int32 slices_ok= 3;
+  double total_ms = 4;
+}
+
+message ProgressEvent {
+  string slice_id = 1;
+  int32 index = 2;
+  string stage = 3;  
+  double elapsed_ms = 4;
+}
+
+
+service Anonymizer {
+  rpc Anonymize(AnonymizeRequest) returns (AnonymizeResponse);
+}
+
+service Enhancer {
+  rpc Enhance(EnhanceRequest) returns (EnhanceResponse);
+}
+
+service Pipeline {
+  rpc ProcessExam(ExamRequest) returns (stream EnhanceResponse);
+  rpc UploadExam(stream Slice) returns (ExamSummary);
+  rpc LiveProcess(stream Slice) returns (stream ProgressEvent);
+}
+
+message ExamRequest {
+  string exam_id = 1;
+}
