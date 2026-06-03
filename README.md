@@ -52,3 +52,50 @@ Se você precisar rodar ou debugar o Gateway localmente **fora do Docker**, o pr
    ```bash
    uv run uvicorn main:app --reload --port 8000
    ```
+
+## Como Testar a Aplicação Localmente
+
+Após realizar a configuração do Desenvolvimento Local, você pode validar o funcionamento das comunicações gRPC e da API Web seguindo os passos abaixo:
+
+### 1. Testes Iniciais do gRPC
+
+Para validar os 4 tipos de chamadas gRPC (Unary, Server Streaming, Client Streaming e Bidirectional Streaming), utilizamos um servidor mock.
+
+Abra dois terminais na pasta `modulo_p_gateway`:
+
+**Terminal 1 (Servidor de Teste):**
+Inicie o mock server que vai escutar as requisições gRPC:
+
+```bash
+uv run python mock_server.py
+```
+
+(O terminal ficará aguardando conexões na porta 50051).
+
+**Terminal 2 (Cliente / Stub):**
+Execute o script de testes para disparar as requisições:
+
+```bash
+uv run python teste_grpc_b1.py
+```
+
+Você verá no console as mensagens de "Sucesso" comprovando que as chamadas foram realizadas e os dados foram processados com êxito.
+
+### 2. Testando a API Gateway (Módulo P)
+
+Com o `mock_server.py` ainda rodando no Terminal 1, você pode testar a interface Web do Gateway que converte as chamadas REST em gRPC.
+
+No Terminal 2, suba o servidor FastAPI:
+
+```bash
+uv run uvicorn main:app --reload --port 8000
+```
+
+Abra o seu navegador e acesse o painel interativo: http://localhost:8000/docs
+
+Na interface do Swagger, expanda qualquer uma das rotas (ex: POST `/api/unary/processar-imagem`).
+
+1. Clique no botão "Try it out" (Testar).
+2. No campo de arquivo, clique em "Escolher arquivo" e selecione qualquer imagem do seu computador.
+3. Clique no botão azul "Execute".
+4. Observe na seção inferior ("Server response") o retorno com Code 200 e o JSON processado pelo backend gRPC!
