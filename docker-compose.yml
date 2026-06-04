@@ -11,6 +11,24 @@ services:
     networks:
       - pspd-net
 
+  modulo-a-servidor:
+    build:
+      context: ./Servidores_GRPC
+      dockerfile: Dockerfile.a
+    ports:
+      - "50051:50051"
+    networks:
+      - pspd-net
+
+  modulo-b-servidor:
+    build:
+      context: ./Servidores_GRPC
+      dockerfile: Dockerfile.b
+    ports:
+      - "50052:50052"
+    networks:
+      - pspd-net
+
 networks:
   pspd-net:
     driver: bridge
