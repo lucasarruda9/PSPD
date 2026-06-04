@@ -8,8 +8,6 @@ Servidores_GRPC/proto/medimg_grpc.pb.go
 *.dylib
 venv
 __pycache__
-service_pb2_grpc.py
-service_pb2.py
 *_pb2.py
 *_pb2_grpc.py
 .venv/
@@ -21,3 +19,10 @@ requires.txt
 SOURCES.txt
 top_level.txt
 dependency_links.txt
+
+# Artefatos gerados pelo benchmark
+benchmarks/amostra.dcm
+benchmarks/resultados/
+benchmarks/.corpo_multipart.bin
+benchmarks/sample.png
+benchmarks/resultado.txt

@@ -1,41 +1,86 @@
+import sys
+from pathlib import Path
+
 import grpc
-import time
-import image_processing_pb2
-import image_processing_pb2_grpc
 
-def executar_testes_b1():
-    print("Conectando ao canal gRPC...")
-    canal = grpc.insecure_channel('localhost:50051')
-    stub = image_processing_pb2_grpc.ImageProcessorServiceStub(canal)
-    print("\nTESTES")
+import medimg_pb2
+import medimg_pb2_grpc
 
-    #1 unary teste
-    print("\n1 - Teste Unary: ProcessarImagem")
-    req_unary = image_processing_pb2.ImagemRequest(dados_imagem=b"dados", formato="png", nome_arquivo="raio_x.png")
-    resp_unary = stub.ProcessarImagem(req_unary)
-    print(f"Sucesso Unary! Tempo: {resp_unary.tempo_ms}ms")
+SERVIDOR_A = "localhost:50051" 
+SERVIDOR_B = "localhost:50052"  
+AMOSTRA = Path(__file__).resolve().parent.parent / "benchmarks" / "amostra.dcm"
 
-    #2 server streaming teste
-    print("\n2 - Teste Server Streaming: ProcessarEtapas")
-    req_server = image_processing_pb2.ImagemRequest(dados_imagem=b"dados", formato="jpg", nome_arquivo="ressonancia.jpg")
-    for resposta in stub.ProcessarEtapas(req_server):
-        print(f"Etapa recebida: {resposta.nome_etapa}")
 
-    #3 cliente streaming teste
-    print("\n3 - Teste Client Streaming: ProcessarLote")
-    def gerar_lote():
-        for i in range(1, 4):
-            yield image_processing_pb2.ImagemRequest(dados_imagem=b"dados", formato="png", nome_arquivo=f"fatia_{i}.png")
-    resp_client = stub.ProcessarLote(gerar_lote())
-    print(f"Sucesso Client Streaming! Processadas: {resp_client.total_processadas}")
+def carregar_amostra() -> bytes:
+    if not AMOSTRA.exists():
+        sys.exit(
+            f"Amostra DICOM nao encontrada em {AMOSTRA}.\n"
+            "Gere com: python3 benchmarks/gerar_amostra_dicom.py benchmarks/amostra.dcm"
+        )
+    return AMOSTRA.read_bytes()
 
-    #4 biderecional streaming teste
-    print("\n4 - Teste Bidirecional: ProcessarPreviewAoVivo")
-    def gerar_stream():
-        for i in range(1, 4):
-            yield image_processing_pb2.ImagemRequest(dados_imagem=b"frame", formato="raw", nome_arquivo=f"frame_{i}.raw")
-    for resposta in stub.ProcessarPreviewAoVivo(gerar_stream()):
-        print(f"Preview recebido: {resposta.nome_etapa}")
 
-if __name__ == '__main__':
-    executar_testes_b1()
+def teste_unary(dados: bytes) -> None:
+    print("\n[1/4] Unary             -> Anonymizer.Anonymize")
+    stub = medimg_pb2_grpc.AnonymizerStub(grpc.insecure_channel(SERVIDOR_A))
+    req = medimg_pb2.AnonymizeRequest(
+        slice=medimg_pb2.Slice(slice_id="amostra.dcm", index=1, data=dados)
+    )
+    resp = stub.Anonymize(req)
+    print(
+        f"  OK  modalidade={resp.metadata.modality} "
+        f"{resp.metadata.rows}x{resp.metadata.columns} "
+        f"tags_removidas={len(resp.metadata.removed_phi_tags)}"
+    )
+
+
+def teste_server_streaming(_dados: bytes) -> None:
+    print("\n[2/4] Server streaming  -> Pipeline.ProcessExam")
+    stub = medimg_pb2_grpc.PipelineStub(grpc.insecure_channel(SERVIDOR_B))
+    req = medimg_pb2.ExamRequest(exam_id="EXAME-001")
+    recebidos = 0
+    for resp in stub.ProcessExam(req):
+        recebidos += 1
+        print(f"  <- slice {resp.slice.slice_id} ({len(resp.slice.data)} bytes)")
+    print(f"  OK  {recebidos} slices recebidos")
+
+
+def teste_client_streaming(dados: bytes) -> None:
+    print("\n[3/4] Client streaming  -> Pipeline.UploadExam")
+    stub = medimg_pb2_grpc.PipelineStub(grpc.insecure_channel(SERVIDOR_B))
+
+    def gerar():
+        for i in range(3):
+            yield medimg_pb2.Slice(slice_id=f"fatia_{i}", index=i, data=dados)
+
+    resp = stub.UploadExam(gerar())
+    print(f"  OK  exam_id={resp.exam_id} slices_ok={resp.slices_ok}")
+
+
+def teste_bidirecional(dados: bytes) -> None:
+    print("\n[4/4] Bidirectional     -> Pipeline.LiveProcess")
+    stub = medimg_pb2_grpc.PipelineStub(grpc.insecure_channel(SERVIDOR_B))
+
+    def gerar():
+        for i in range(3):
+            yield medimg_pb2.Slice(slice_id=f"fatia_{i}", index=i, data=dados)
+
+    eventos = 0
+    for evento in stub.LiveProcess(gerar()):
+        eventos += 1
+        print(f"  <- [{evento.slice_id}] {evento.stage}")
+    print(f"  OK  {eventos} eventos de progresso recebidos")
+
+
+def main() -> None:
+    dados = carregar_amostra()
+    print(f"Amostra DICOM: {AMOSTRA.name} ({len(dados)} bytes)")
+    teste_unary(dados)
+    teste_server_streaming(dados)
+    teste_client_streaming(dados)
+    teste_bidirecional(dados)
+    print("\nTodos os 4 tipos de chamada gRPC foram executados.")
+
+
+if __name__ == "__main__":
+    main()
