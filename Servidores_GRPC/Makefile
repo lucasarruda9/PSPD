@@ -15,3 +15,6 @@ tidy:
 	go mod tidy
 	@echo "go.mod atualizado!"
 
+run-a:
+	go run servidores/servidor_a.go
+
