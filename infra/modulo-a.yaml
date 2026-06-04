@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modulo-a-deployment
+  namespace: pspd
+  labels:
+    app: modulo-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modulo-a
+  template:
+    metadata:
+      labels:
+        app: modulo-a
+    spec:
+      containers:
+      - name: modulo-a
+        image: pspd-modulo-a-servidor
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 50051
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: modulo-a-servidor
+  namespace: pspd
+spec:
+  selector:
+    app: modulo-a
+  ports:
+    - protocol: TCP
+      port: 50051
+      targetPort: 50051

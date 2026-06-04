@@ -552,15 +552,16 @@ async function callUnary() {
             '',
             `Arquivo        : ${d.arquivo}`,
             `Servidor       : ${d.servidor}`,
-            `Formato saída  : ${d.formato_saida}`,
-            `Tempo gRPC     : ${d.tempo_ms} ms`,
+            `Modalidade     : ${d.metadados?.modalidade}`,
+            `Resolução      : ${d.metadados?.resolucao}`,
             `Tempo HTTP total: ${elapsed} ms`,
             `Tamanho entrada: ${d.tamanho_entrada_bytes} bytes`,
+            `Tamanho saida  : ${d.tamanho_saida_bytes} bytes`,
             '',
-            `Etapas: ${(d.etapas_aplicadas || []).join(' → ')}`,
+            `Tags Removidas : ${(d.metadados?.tags_removidas || []).join(', ')}`
         ].join('\n'), 'success');
 
-        log(`Unary ✓ concluído em ${elapsed}ms (gRPC: ${d.tempo_ms}ms)`, 'u');
+        log(`Unary ✓ concluído em ${elapsed}ms`, 'u');
     } catch (e) {
         setRes('u', `✗ Erro: ${e.message}`, 'fail');
         log(`Unary ✗ ${e.message}`, 'err');
