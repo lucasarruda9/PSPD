@@ -32,8 +32,9 @@ def serve():
     servidor = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     image_processing_pb2_grpc.add_ImageProcessorServiceServicer_to_server(MockImageProcessor(), servidor)
     servidor.add_insecure_port('[::]:50051')
+    servidor.add_insecure_port('[::]:50052')
     servidor.start()
-    print("Mock Server gRPC rodando na porta 50051...")
+    print("Mock Server gRPC rodando nas portas 50051 e 50052...")
     servidor.wait_for_termination()
 if __name__ == '__main__':
     serve()
