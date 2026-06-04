@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modulo-p-gateway
+  namespace: pspd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modulo-p-gateway
+  template:
+    metadata:
+      labels:
+        app: modulo-p-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: pspd/modulo-p-gateway:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: GRPC_SERVER_A
+              value: "modulo-a-servidor:50051"
+            - name: GRPC_SERVER_B
+              value: "modulo-b-servidor:50052"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: modulo-p-gateway
+  namespace: pspd
+spec:
+  type: NodePort
+  selector:
+    app: modulo-p-gateway
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080

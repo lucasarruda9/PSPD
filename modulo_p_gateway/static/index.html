@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PSPD Gateway · Módulo P</title>
+    <meta name="description" content="Gateway REST↔gRPC para processamento distribuído de imagens médicas — PSPD UnB/FCTE Engenharia de Software">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #04080f;
+            --bg2:       #06090f;
+            --surface:   #0c1526;
+            --surface2:  #111f38;
+            --border:    rgba(56, 100, 200, 0.18);
+            --border-hi: rgba(80, 140, 255, 0.45);
+
+            --text:      #dde6f0;
+            --text-dim:  #8da0b8;
+            --text-muted:#4a637a;
+
+            --unary:     #3b82f6;
+            --unary-bg:  rgba(59, 130, 246, 0.12);
+            --unary-brd: rgba(59, 130, 246, 0.35);
+
+            --srv:       #10b981;
+            --srv-bg:    rgba(16, 185, 129, 0.12);
+            --srv-brd:   rgba(16, 185, 129, 0.35);
+
+            --cli:       #f59e0b;
+            --cli-bg:    rgba(245, 158, 11, 0.12);
+            --cli-brd:   rgba(245, 158, 11, 0.35);
+
+            --bidi:      #ec4899;
+            --bidi-bg:   rgba(236, 72, 153, 0.12);
+            --bidi-brd:  rgba(236, 72, 153, 0.35);
+
+            --r:  10px;
+            --rl: 14px;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            background-image:
+                radial-gradient(ellipse 60% 40% at 15% 10%, rgba(59,130,246,0.06) 0%, transparent 70%),
+                radial-gradient(ellipse 50% 40% at 85% 90%, rgba(16,185,129,0.05) 0%, transparent 70%);
+        }
+
+        /*Header sticky no topo */
+        header {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(4, 8, 15, 0.85);
+            backdrop-filter: blur(24px);
+            border-bottom: 1px solid var(--border);
+        }
+        .header-inner {
+            max-width: 1200px; margin: 0 auto;
+            display: flex; align-items: center; gap: 1rem;
+            height: 60px; padding: 0 1.5rem;
+        }
+        .logo {
+            display: flex; align-items: center; gap: 0.6rem;
+            text-decoration: none;
+        }
+        .logo-icon {
+            width: 34px; height: 34px; border-radius: 8px;
+            background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px; flex-shrink: 0;
+        }
+        .logo-name {
+            font-size: 1rem; font-weight: 700; color: var(--text);
+            line-height: 1.1;
+        }
+        .logo-sub { font-size: 0.68rem; color: var(--text-muted); font-weight: 400; }
+
+        .spacer { flex: 1; }
+
+        .badges { display: flex; gap: 0.45rem; }
+        .badge {
+            display: flex; align-items: center; gap: 0.35rem;
+            padding: 0.28rem 0.7rem; border-radius: 100px;
+            font-size: 0.72rem; font-weight: 600; border: 1px solid;
+            transition: all 0.3s;
+        }
+        .badge.ok   { background: rgba(16,185,129,.1); border-color: rgba(16,185,129,.3); color: #10b981; }
+        .badge.err  { background: rgba(239, 68,68,.1); border-color: rgba(239, 68,68,.3); color: #ef4444; }
+        .badge.chk  { background: rgba(245,158,11,.1); border-color: rgba(245,158,11,.3); color: #f59e0b; }
+        .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1.8s ease infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        .btn-docs {
+            padding: 0.3rem 0.75rem; border-radius: var(--r);
+            border: 1px solid var(--border); background: var(--surface);
+            color: var(--text-dim); font-size: 0.75rem; font-weight: 500;
+            text-decoration: none; transition: all 0.2s;
+        }
+        .btn-docs:hover { border-color: var(--border-hi); color: var(--text); }
+
+        /*Main content */
+        main { max-width: 1200px; margin: 0 auto; padding: 1.75rem 1.5rem 3rem; }
+
+        /*Seção hero (título) */
+        .hero { text-align: center; padding: 1.75rem 0 1.5rem; }
+        .hero h1 {
+            font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #dde6f0 20%, #5a7a9a 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.4rem;
+        }
+        .hero p { color: var(--text-muted); font-size: 0.88rem; }
+
+        /*Arquitetura visual */
+        .arch {
+            display: flex; align-items: center; justify-content: center;
+            flex-wrap: wrap; gap: 0.4rem;
+            padding: 0.6rem 1rem; margin-bottom: 1.75rem;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--rl);
+        }
+        .an {
+            display: flex; align-items: center; gap: 0.35rem;
+            padding: 0.22rem 0.65rem; border-radius: 7px;
+            font-size: 0.73rem; font-weight: 600; border: 1px solid;
+        }
+        .an.client { background: rgba(100,116,139,.12); border-color: rgba(100,116,139,.2); color: #8da0b8; }
+        .an.gwt    { background: rgba(99,102,241,.13);  border-color: rgba(99,102,241,.3);  color: #a5b4fc; }
+        .an.sva    { background: var(--unary-bg);        border-color: var(--unary-brd);     color: #93c5fd; }
+        .an.svb    { background: var(--bidi-bg);         border-color: var(--bidi-brd);      color: #f9a8d4; }
+        .arr { color: var(--text-muted); font-size: 0.8rem; }
+        .sep { width: 1px; height: 22px; background: var(--border); }
+
+        /*Grid de cards dos 4 tipos de chamadas */
+        .grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 1.1rem; margin-bottom: 1.25rem;
+        }
+        @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+
+        /*Estilo do card */
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--rl); overflow: hidden;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .card:hover { border-color: var(--border-hi); box-shadow: 0 0 30px rgba(56,100,200,0.07); }
+
+        .card-head {
+            display: flex; align-items: flex-start; gap: 0.85rem;
+            padding: 1.1rem 1.15rem 0.9rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .cicon {
+            width: 38px; height: 38px; border-radius: 9px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.15rem; border: 1px solid;
+        }
+        .cicon.u { background: var(--unary-bg); border-color: var(--unary-brd); }
+        .cicon.s { background: var(--srv-bg);   border-color: var(--srv-brd);   }
+        .cicon.c { background: var(--cli-bg);   border-color: var(--cli-brd);   }
+        .cicon.b { background: var(--bidi-bg);  border-color: var(--bidi-brd);  }
+
+        .ctitle { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.15rem; }
+        .ctitle.u { color: var(--unary); }
+        .ctitle.s { color: var(--srv); }
+        .ctitle.c { color: var(--cli); }
+        .ctitle.b { color: var(--bidi); }
+
+        .csub { font-size: 0.7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+        .cbadge {
+            margin-left: auto; flex-shrink: 0;
+            padding: 0.18rem 0.5rem; border-radius: 6px;
+            font-size: 0.65rem; font-weight: 700; border: 1px solid;
+        }
+        .cbadge.a { background: var(--unary-bg); border-color: var(--unary-brd); color: #93c5fd; }
+        .cbadge.b { background: var(--bidi-bg);  border-color: var(--bidi-brd);  color: #f9a8d4; }
+
+        /*─── Card body ─── */
+        .card-body { padding: 1.1rem 1.15rem; }
+
+        /*Zona de drag & drop */
+        .zone {
+            position: relative; border-radius: var(--r);
+            border: 1.5px dashed var(--border);
+            padding: 1.1rem; text-align: center;
+            cursor: pointer; margin-bottom: 0.85rem;
+            transition: all 0.2s; background: rgba(255,255,255,0.01);
+        }
+        .zone:hover, .zone.over { border-color: var(--border-hi); background: rgba(80,140,255,0.04); }
+        .zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+        .zone-ico { font-size: 1.6rem; margin-bottom: 0.3rem; }
+        .zone-txt { font-size: 0.78rem; color: var(--text-dim); }
+        .zone-hint { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.15rem; }
+        .zone-sel { font-size: 0.72rem; color: var(--text); font-family: 'JetBrains Mono', monospace; margin-top: 0.35rem; word-break: break-all; }
+
+        /*Botões de execução */
+        .btn {
+            width: 100%; padding: 0.6rem 1rem; border: none; border-radius: var(--r);
+            font-size: 0.82rem; font-weight: 600; cursor: pointer;
+            font-family: 'Inter', sans-serif; margin-bottom: 0.85rem;
+            display: flex; align-items: center; justify-content: center; gap: 0.45rem;
+            transition: all 0.2s;
+        }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+        .btn-u { background: var(--unary); color: #fff; }
+        .btn-u:hover:not(:disabled) { background: #2563eb; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(59,130,246,.35); }
+
+        .btn-s { background: var(--srv); color: #fff; }
+        .btn-s:hover:not(:disabled) { background: #059669; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(16,185,129,.35); }
+
+        .btn-c { background: var(--cli); color: #111; }
+        .btn-c:hover:not(:disabled) { background: #d97706; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(245,158,11,.35); }
+
+        .btn-b { background: var(--bidi); color: #fff; }
+        .btn-b:hover:not(:disabled) { background: #db2777; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(236,72,153,.35); }
+
+        .spin {
+            width: 13px; height: 13px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+            animation: rot .65s linear infinite; display: none;
+        }
+        .btn-c .spin { border-top-color: #111; border-color: rgba(0,0,0,.2); }
+        .loading .spin { display: block; }
+        .loading .lbl  { display: none; }
+        @keyframes rot { to { transform: rotate(360deg); } }
+
+        /*Área de resultados */
+        .res {
+            background: var(--bg2); border: 1px solid var(--border);
+            border-radius: var(--r); padding: 0.7rem 0.9rem;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+            line-height: 1.75; color: var(--text-muted);
+            white-space: pre-wrap; overflow-y: auto; max-height: 175px;
+            min-height: 72px; transition: border-color 0.3s;
+        }
+        .res.live    { border-color: var(--border-hi); }
+        .res.success { border-color: rgba(16,185,129,.4); color: var(--text-dim); }
+        .res.fail    { border-color: rgba(239,68,68,.4); color: #fca5a5; }
+        .res.idle    { color: var(--text-muted); font-style: italic; }
+
+        /*Activity log no rodapé */
+        .log-wrap {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--rl); overflow: hidden;
+        }
+        .log-head {
+            display: flex; align-items: center; gap: 0.65rem;
+            padding: 0.75rem 1.1rem; border-bottom: 1px solid var(--border);
+        }
+        .mac { display: flex; gap: 0.28rem; }
+        .mac span { width: 9px; height: 9px; border-radius: 50%; }
+        .mac span:nth-child(1){ background:#ef4444; }
+        .mac span:nth-child(2){ background:#f59e0b; }
+        .mac span:nth-child(3){ background:#10b981; }
+        .log-title { font-size: 0.8rem; font-weight: 600; color: var(--text-dim); }
+        .log-clr {
+            margin-left: auto; background: none; border: 1px solid var(--border);
+            color: var(--text-muted); padding: 0.18rem 0.55rem; border-radius: 6px;
+            cursor: pointer; font-size: 0.69rem; font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+        .log-clr:hover { border-color: var(--border-hi); color: var(--text-dim); }
+
+        .log-body {
+            padding: 0.75rem 1.1rem; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem; line-height: 1.85; max-height: 190px;
+            overflow-y: auto; color: var(--text-muted);
+        }
+        .le { display: flex; gap: 0.65rem; }
+        .lt { color: #3d5a73; flex-shrink: 0; }
+        .lm      { color: var(--text-dim); }
+        .lm.u    { color: #93c5fd; }
+        .lm.s    { color: #6ee7b7; }
+        .lm.c    { color: #fcd34d; }
+        .lm.b    { color: #f9a8d4; }
+        .lm.err  { color: #fca5a5; }
+        .lm.info { color: #6b8a9e; }
+
+        /*Scrollbar customizada */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1e2f48; border-radius: 2px; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+    <div class="header-inner">
+        <a class="logo" href="/">
+            <div class="logo-icon">⚡</div>
+            <div>
+                <div class="logo-name">PSPD Gateway</div>
+                <div class="logo-sub">Módulo P · UnB/FCTE — Eng. de Software</div>
+            </div>
+        </a>
+        <div class="spacer"></div>
+        <div class="badges">
+            <div class="badge chk" id="badge-a"><div class="dot"></div>Server A</div>
+            <div class="badge chk" id="badge-b"><div class="dot"></div>Server B</div>
+        </div>
+        <a class="btn-docs" href="/docs" target="_blank">API Docs ↗</a>
+    </div>
+</header>
+
+<!-- Conteúdo principal -->
+<main>
+
+    <div class="hero">
+        <h1>Processamento Distribuído de Imagens</h1>
+        <p>Gateway REST ↔ gRPC &nbsp;·&nbsp; Módulo P &nbsp;·&nbsp; PSPD – Programação para Sistemas Paralelos e Distribuídos</p>
+    </div>
+
+    <!-- Arquitetura -->
+    <div class="arch">
+        <div class="an client">🌐 Web Client</div>
+        <span class="arr">── HTTP/REST ──▶</span>
+        <div class="an gwt">⚡ gRPC Stub (P)</div>
+        <div class="sep"></div>
+        <span class="arr">▶ Proto ▶</span>
+        <div class="an sva">🔵 gRPC Server A</div>
+        <span class="arr">+</span>
+        <div class="an svb">🔴 gRPC Server B</div>
+    </div>
+
+    <!-- Grid de chamadas -->
+    <div class="grid">
+
+        <!-- Unary: 1 imagem → 1 resposta -->
+        <div class="card">
+            <div class="card-head">
+                <div class="cicon u">➤</div>
+                <div>
+                    <div class="ctitle u">Chamada Unary</div>
+                    <div class="csub">1 request → 1 response</div>
+                </div>
+                <div class="cbadge a">Server A</div>
+            </div>
+            <div class="card-body">
+                <div class="zone" id="zone-u">
+                    <input type="file" id="file-u" accept="image/*,.dcm">
+                    <div class="zone-ico">📁</div>
+                    <div class="zone-txt">Clique ou arraste uma imagem</div>
+                    <div class="zone-hint">PNG · JPG · DICOM</div>
+                    <div class="zone-sel" id="sel-u"></div>
+                </div>
+                <button class="btn btn-u" id="btn-u" onclick="callUnary()">
+                    <div class="spin"></div><span class="lbl">▶ Executar Unary</span>
+                </button>
+                <div class="res idle" id="res-u">Aguardando execução…</div>
+            </div>
+        </div>
+
+        <!-- Server Streaming: etapas em tempo real -->
+        <div class="card">
+            <div class="card-head">
+                <div class="cicon s">⟹</div>
+                <div>
+                    <div class="ctitle s">Server Streaming</div>
+                    <div class="csub">1 request → stream de etapas</div>
+                </div>
+                <div class="cbadge a">Server A</div>
+            </div>
+            <div class="card-body">
+                <div class="zone" id="zone-s">
+                    <input type="file" id="file-s" accept="image/*,.dcm">
+                    <div class="zone-ico">📁</div>
+                    <div class="zone-txt">Clique ou arraste uma imagem</div>
+                    <div class="zone-hint">PNG · JPG · DICOM</div>
+                    <div class="zone-sel" id="sel-s"></div>
+                </div>
+                <button class="btn btn-s" id="btn-s" onclick="callServerStream()">
+                    <div class="spin"></div><span class="lbl">▶ Executar Server Stream</span>
+                </button>
+                <div class="res idle" id="res-s">Aguardando execução…</div>
+            </div>
+        </div>
+
+        <!-- Client Streaming: múltiplas imagens → 1 resumo -->
+        <div class="card">
+            <div class="card-head">
+                <div class="cicon c">⤳</div>
+                <div>
+                    <div class="ctitle c">Client Streaming</div>
+                    <div class="csub">stream de requests → 1 response</div>
+                </div>
+                <div class="cbadge b">Server B</div>
+            </div>
+            <div class="card-body">
+                <div class="zone" id="zone-c">
+                    <input type="file" id="file-c" accept="image/*,.dcm" multiple>
+                    <div class="zone-ico">📂</div>
+                    <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
+                    <div class="zone-hint">Selecione 2 ou mais arquivos</div>
+                    <div class="zone-sel" id="sel-c"></div>
+                </div>
+                <button class="btn btn-c" id="btn-c" onclick="callClientStream()">
+                    <div class="spin"></div><span class="lbl">▶ Executar Client Stream</span>
+                </button>
+                <div class="res idle" id="res-c">Aguardando execução…</div>
+            </div>
+        </div>
+
+        <!-- Bidirecional: stream ↔ stream em tempo real -->
+        <div class="card">
+            <div class="card-head">
+                <div class="cicon b">⇄</div>
+                <div>
+                    <div class="ctitle b">Bidirecional</div>
+                    <div class="csub">stream ⇄ stream em tempo real</div>
+                </div>
+                <div class="cbadge b">Server B</div>
+            </div>
+            <div class="card-body">
+                <div class="zone" id="zone-b">
+                    <input type="file" id="file-b" accept="image/*,.dcm" multiple>
+                    <div class="zone-ico">📂</div>
+                    <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
+                    <div class="zone-hint">Selecione 2 ou mais arquivos</div>
+                    <div class="zone-sel" id="sel-b"></div>
+                </div>
+                <button class="btn btn-b" id="btn-b" onclick="callBidi()">
+                    <div class="spin"></div><span class="lbl">▶ Executar Bidirecional</span>
+                </button>
+                <div class="res idle" id="res-b">Aguardando execução…</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="log-wrap">
+        <div class="log-head">
+            <div class="mac"><span></span><span></span><span></span></div>
+            <div class="log-title">Activity Log</div>
+            <button class="log-clr" onclick="clearLog()">Limpar</button>
+        </div>
+        <div class="log-body" id="log"></div>
+    </div>
+
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function log(msg, type = 'info') {
+    const now = new Date().toLocaleTimeString('pt-BR', { hour12: false });
+    const le = document.createElement('div');
+    le.className = 'le';
+    le.innerHTML = `<span class="lt">[${now}]</span><span class="lm ${type}">${msg}</span>`;
+    const lb = $('log');
+    lb.appendChild(le);
+    lb.scrollTop = lb.scrollHeight;
+}
+
+function clearLog() { $('log').innerHTML = ''; }
+
+function setLoading(id, on) {
+    const b = $(id);
+    b.classList.toggle('loading', on);
+    b.disabled = on;
+}
+
+function setRes(id, text, cls = '') {
+    const el = $(`res-${id}`);
+    el.textContent = text;
+    el.className = `res ${cls || 'idle'}`;
+}
+
+function appendRes(id, text) {
+    const el = $(`res-${id}`);
+    el.className = 'res live';
+    el.textContent += text;
+    el.scrollTop = el.scrollHeight;
+}
+
+//Gerenciar seleção de arquivos e drag & drop
+['u','s','c','b'].forEach(k => {
+    const inp = $(`file-${k}`);
+    const sel = $(`sel-${k}`);
+    inp.addEventListener('change', () => {
+        const files = [...inp.files];
+        sel.textContent = files.length === 0 ? ''
+            : files.length === 1 ? `📎 ${files[0].name}`
+            : `📎 ${files.length} arquivos selecionados`;
+    });
+
+    //Suportar arrastar e soltar
+    const zone = $(`zone-${k}`);
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('over');
+        inp.files = e.dataTransfer.files;
+        inp.dispatchEvent(new Event('change'));
+    });
+});
+
+//Atualizar status dos badges (online/offline)
+function setBadge(id, state) {
+    const el = $(id);
+    el.className = `badge ${state}`;
+}
+
+//Verificar conexão com o gateway
+async function checkHealth() {
+    try {
+        const r = await fetch('/health');
+        const d = await r.json();
+        log(`Gateway online · Server A: ${d.grpc_server_a} · Server B: ${d.grpc_server_b}`, 'info');
+        setBadge('badge-a', 'ok');
+        setBadge('badge-b', 'ok');
+    } catch (e) {
+        log('Falha ao conectar ao gateway', 'err');
+        setBadge('badge-a', 'err');
+        setBadge('badge-b', 'err');
+    }
+}
+
+//Chamada Unary
+async function callUnary() {
+    const file = $('file-u').files[0];
+    if (!file) { log('Selecione um arquivo para a chamada Unary.', 'err'); return; }
+
+    setLoading('btn-u', true);
+    setRes('u', 'Enviando requisição ao Server A…', 'live');
+    log(`Unary → "${file.name}" → Server A`, 'u');
+
+    const form = new FormData();
+    form.append('arquivo', file);
+    const t0 = Date.now();
+
+    try {
+        const r = await fetch('/api/unary/processar-imagem', { method: 'POST', body: form });
+        if (!r.ok) throw new Error(await r.text());
+        const d = await r.json();
+        const elapsed = Date.now() - t0;
+
+        setRes('u', [
+            '✓ Processamento concluído',
+            '',
+            `Arquivo        : ${d.arquivo}`,
+            `Servidor       : ${d.servidor}`,
+            `Formato saída  : ${d.formato_saida}`,
+            `Tempo gRPC     : ${d.tempo_ms} ms`,
+            `Tempo HTTP total: ${elapsed} ms`,
+            `Tamanho entrada: ${d.tamanho_entrada_bytes} bytes`,
+            '',
+            `Etapas: ${(d.etapas_aplicadas || []).join(' → ')}`,
+        ].join('\n'), 'success');
+
+        log(`Unary ✓ concluído em ${elapsed}ms (gRPC: ${d.tempo_ms}ms)`, 'u');
+    } catch (e) {
+        setRes('u', `✗ Erro: ${e.message}`, 'fail');
+        log(`Unary ✗ ${e.message}`, 'err');
+    } finally {
+        setLoading('btn-u', false);
+    }
+}
+
+//Server Streaming
+async function callServerStream() {
+    const file = $('file-s').files[0];
+    if (!file) { log('Selecione um arquivo para Server Streaming.', 'err'); return; }
+
+    setLoading('btn-s', true);
+    setRes('s', '', 'live');
+    log(`Server Stream → "${file.name}" → Server A`, 's');
+
+    const form = new FormData();
+    form.append('arquivo', file);
+    const t0 = Date.now();
+    const lines = [];
+
+    try {
+        const r = await fetch('/api/server-stream/processar-etapas', { method: 'POST', body: form });
+        if (!r.ok) throw new Error(await r.text());
+
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = dec.decode(value, { stream: true });
+            chunk.split('\n').filter(l => l.trim()).forEach(l => {
+                lines.push(l);
+                appendRes('s', l + '\n');
+                log(`  ↳ ${l.trim()}`, 's');
+            });
+        }
+
+        const elapsed = Date.now() - t0;
+        appendRes('s', `\n✓ Stream completo — ${lines.length} etapas em ${elapsed}ms`);
+        $('res-s').className = 'res success';
+        log(`Server Stream ✓ ${lines.length} etapas em ${elapsed}ms`, 's');
+    } catch (e) {
+        setRes('s', `✗ Erro: ${e.message}`, 'fail');
+        log(`Server Stream ✗ ${e.message}`, 'err');
+    } finally {
+        setLoading('btn-s', false);
+    }
+}
+
+//Client Streaming
+async function callClientStream() {
+    const files = $('file-c').files;
+    if (!files.length) { log('Selecione arquivos para Client Streaming.', 'err'); return; }
+
+    setLoading('btn-c', true);
+    setRes('c', `Enviando ${files.length} arquivo(s) ao Server B…`, 'live');
+    log(`Client Stream → ${files.length} arquivo(s) → Server B`, 'c');
+
+    const form = new FormData();
+    [...files].forEach(f => form.append('arquivos', f));
+    const t0 = Date.now();
+
+    try {
+        const r = await fetch('/api/client-stream/processar-lote', { method: 'POST', body: form });
+        if (!r.ok) throw new Error(await r.text());
+        const d = await r.json();
+        const elapsed = Date.now() - t0;
+
+        setRes('c', [
+            '✓ Lote processado',
+            '',
+            `Servidor           : ${d.servidor}`,
+            `Total processadas  : ${d.total_processadas}`,
+            `Total com erros    : ${d.total_erros}`,
+            `Tempo gRPC total   : ${d.tempo_total_ms} ms`,
+            `Tempo HTTP total   : ${elapsed} ms`,
+            '',
+            'Arquivos:',
+            ...(d.arquivos_processados || []).map(f => `  · ${f}`),
+        ].join('\n'), 'success');
+
+        log(`Client Stream ✓ lote de ${d.total_processadas} imagens em ${elapsed}ms`, 'c');
+    } catch (e) {
+        setRes('c', `✗ Erro: ${e.message}`, 'fail');
+        log(`Client Stream ✗ ${e.message}`, 'err');
+    } finally {
+        setLoading('btn-c', false);
+    }
+}
+
+//Bidirecional Streaming
+async function callBidi() {
+    const files = $('file-b').files;
+    if (!files.length) { log('Selecione arquivos para Bidirecional.', 'err'); return; }
+
+    setLoading('btn-b', true);
+    setRes('b', '', 'live');
+    log(`Bidirecional → ${files.length} arquivo(s) → Server B`, 'b');
+
+    const form = new FormData();
+    [...files].forEach(f => form.append('arquivos', f));
+    const t0 = Date.now();
+    const lines = [];
+
+    try {
+        const r = await fetch('/api/bidirecional/preview-ao-vivo', { method: 'POST', body: form });
+        if (!r.ok) throw new Error(await r.text());
+
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = dec.decode(value, { stream: true });
+            chunk.split('\n').filter(l => l.trim()).forEach(l => {
+                lines.push(l);
+                appendRes('b', l + '\n');
+                log(`  ↳ ${l.trim()}`, 'b');
+            });
+        }
+
+        const elapsed = Date.now() - t0;
+        appendRes('b', `\n✓ Stream bidirecional — ${lines.length} previews em ${elapsed}ms`);
+        $('res-b').className = 'res success';
+        log(`Bidirecional ✓ ${lines.length} previews em ${elapsed}ms`, 'b');
+    } catch (e) {
+        setRes('b', `✗ Erro: ${e.message}`, 'fail');
+        log(`Bidirecional ✗ ${e.message}`, 'err');
+    } finally {
+        setLoading('btn-b', false);
+    }
+}
+
+//Inicializar ao carregar a página
+window.addEventListener('load', () => {
+    log('Interface carregada. Verificando conexão com o gateway…', 'info');
+    checkHealth();
+});
+</script>
+</body>
+</html>

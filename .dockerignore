@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+*.egg-info/
+dist/
+build/
+
+# stubs gerados pelo protoc — não versionar
+*_pb2.py
+*_pb2_grpc.py
+
+# Go
+# (dependências do Go se necessário)
+*.class
+*.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
