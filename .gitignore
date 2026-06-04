@@ -7,3 +7,9 @@ service_pb2.py
 .venv/
 uv.lock
 .uv/
+*.egg-info/
+PKG-INFO
+requires.txt
+SOURCES.txt
+top_level.txt
+dependency_links.txt
