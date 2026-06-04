@@ -18,3 +18,5 @@ tidy:
 run-a:
 	go run servidores/servidor_a.go
 
+run-b:
+	go run servidores/servidor_b.go
