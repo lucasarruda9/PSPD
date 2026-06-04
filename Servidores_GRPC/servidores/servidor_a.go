@@ -87,16 +87,6 @@ func (s *anonymizerServer) Anonymize(ctx context.Context, req *pb.AnonymizeReque
 					pixelInfo.UnprocessedValueData[i] = 0
 				}
 			}
-			
-			novoElem, err := dicom.NewElement(tag.PixelData, pixelInfo)
-			if err == nil {
-				for i, e := range dataset.Elements {
-					if e.Tag == tag.PixelData {
-						dataset.Elements[i] = novoElem
-						break
-					}
-				}
-			}
 		}
 	}
 

@@ -71,23 +71,9 @@ func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarB
         if valorPixel < ValorMinimoPixel {
             valorPixel = ValorMinimoPixel
         } 
-        bytesBrutosPixel[i] = byte(valorPixel & 0xFF)
-        bytesBrutosPixel[i+1] = byte((valorPixel >> 8) & 0xFF)
-    }
-
-    // Cria um novo elemento DICOM atualizado com os pixels modificados
-    elementoPixelAtualizado, err := dicom.NewElement(tag.PixelData, informacaoPixel)
-    if err != nil {
-        return nil, fmt.Errorf("erro ao remontar o elemento de pixels: %v", err)
-    }
-
-    // Substitui o elemento antigo de pixels pelo novo dentro do dataset
-    for indice, elementoAtual := range dataset.Elements {
-        if elementoAtual.Tag == tag.PixelData {
-            dataset.Elements[indice] = elementoPixelAtualizado
-            break
-        }
-    }
+		bytesBrutosPixel[i] = byte(valorPixel & 0xFF)
+		bytesBrutosPixel[i+1] = byte((valorPixel >> 8) & 0xFF)
+	}
 
     // Grava o arquivo DICOM atualizado na memória para retorno
     var bufferEscrita bytes.Buffer
