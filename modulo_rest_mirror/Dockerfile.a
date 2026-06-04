@@ -1,0 +1,12 @@
+FROM golang:alpine AS builder
+
+WORKDIR /app
+COPY go.mod ./
+COPY servidor_a ./servidor_a
+RUN go mod tidy && go build -o servidor_a_rest ./servidor_a
+
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/servidor_a_rest .
+EXPOSE 9001
+CMD ["./servidor_a_rest"]
