@@ -105,6 +105,19 @@
         }
         .btn-docs:hover { border-color: var(--border-hi); color: var(--text); }
 
+        /*Seletor de backend (gRPC / REST) */
+        .switch {
+            display: flex; border: 1px solid var(--border); border-radius: var(--r);
+            overflow: hidden; background: var(--surface);
+        }
+        .sw-opt {
+            padding: 0.3rem 0.75rem; border: none; background: transparent;
+            color: var(--text-dim); font-size: 0.72rem; font-weight: 700;
+            cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.2s;
+        }
+        .sw-opt:hover { color: var(--text); }
+        .sw-opt.active { background: linear-gradient(135deg, #3b82f6 0%, #10b981 100%); color: #fff; }
+
         /*Main content */
         main { max-width: 1200px; margin: 0 auto; padding: 1.75rem 1.5rem 3rem; }
 
@@ -307,6 +320,10 @@
             </div>
         </a>
         <div class="spacer"></div>
+        <div class="switch" id="backend-switch" title="Escolhe o backend que a interface chama">
+            <button class="sw-opt active" data-base="" onclick="setBackend(this)">gRPC</button>
+            <button class="sw-opt" data-base="REST" onclick="setBackend(this)">REST</button>
+        </div>
         <div class="badges">
             <div class="badge chk" id="badge-a"><div class="dot"></div>Server A</div>
             <div class="badge chk" id="badge-b"><div class="dot"></div>Server B</div>
@@ -327,12 +344,12 @@
     <div class="arch">
         <div class="an client">🌐 Web Client</div>
         <span class="arr">── HTTP/REST ──▶</span>
-        <div class="an gwt">⚡ gRPC Stub (P)</div>
+        <div class="an gwt" id="arch-gw">⚡ gRPC Stub (P)</div>
         <div class="sep"></div>
-        <span class="arr">▶ Proto ▶</span>
-        <div class="an sva">🔵 gRPC Server A</div>
+        <span class="arr" id="arch-proto">▶ Proto ▶</span>
+        <div class="an sva" id="arch-sva">🔵 gRPC Server A</div>
         <span class="arr">+</span>
-        <div class="an svb">🔴 gRPC Server B</div>
+        <div class="an svb" id="arch-svb">🔴 gRPC Server B</div>
     </div>
 
     <!-- Grid de chamadas -->
@@ -454,6 +471,21 @@
 <script>
 const $ = id => document.getElementById(id);
 
+//Base URL do backend: '' = gRPC (mesma origem :8000); REST = gateway P' (:8001)
+let BASE = '';
+function setBackend(btn) {
+    document.querySelectorAll('#backend-switch .sw-opt').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const rest = btn.dataset.base === 'REST';
+    BASE = rest ? `${location.protocol}//${location.hostname}:8001` : '';
+    $('arch-gw').textContent    = rest ? "🌐 REST Gateway (P')" : '⚡ gRPC Stub (P)';
+    $('arch-proto').textContent = rest ? '▶ JSON ▶' : '▶ Proto ▶';
+    $('arch-sva').textContent   = rest ? "🔵 REST Server A'" : '🔵 gRPC Server A';
+    $('arch-svb').textContent   = rest ? "🔴 REST Server B'" : '🔴 gRPC Server B';
+    log(`Backend: ${btn.textContent.trim()} ${BASE ? '('+BASE+')' : '(gRPC · mesma origem)'}`, 'info');
+    checkHealth();
+}
+
 function log(msg, type = 'info') {
     const now = new Date().toLocaleTimeString('pt-BR', { hour12: false });
     const le = document.createElement('div');
@@ -516,9 +548,11 @@ function setBadge(id, state) {
 //Verificar conexão com o gateway
 async function checkHealth() {
     try {
-        const r = await fetch('/health');
+        const r = await fetch(BASE + '/health');
         const d = await r.json();
-        log(`Gateway online · Server A: ${d.grpc_server_a} · Server B: ${d.grpc_server_b}`, 'info');
+        const srvA = d.grpc_server_a || d.rest_server_a;
+        const srvB = d.grpc_server_b || d.rest_server_b;
+        log(`Gateway online · Server A: ${srvA} · Server B: ${srvB}`, 'info');
         setBadge('badge-a', 'ok');
         setBadge('badge-b', 'ok');
     } catch (e) {
@@ -542,7 +576,7 @@ async function callUnary() {
     const t0 = Date.now();
 
     try {
-        const r = await fetch('/api/unary/processar-imagem', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/unary/processar-imagem', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
         const d = await r.json();
         const elapsed = Date.now() - t0;
@@ -585,7 +619,7 @@ async function callServerStream() {
     const lines = [];
 
     try {
-        const r = await fetch('/api/server-stream/processar-etapas', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/server-stream/processar-etapas', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
 
         const reader = r.body.getReader();
@@ -628,7 +662,7 @@ async function callClientStream() {
     const t0 = Date.now();
 
     try {
-        const r = await fetch('/api/client-stream/processar-lote', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/client-stream/processar-lote', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
         const d = await r.json();
         const elapsed = Date.now() - t0;
@@ -636,17 +670,14 @@ async function callClientStream() {
         setRes('c', [
             '✓ Lote processado',
             '',
-            `Servidor           : ${d.servidor}`,
-            `Total processadas  : ${d.total_processadas}`,
-            `Total com erros    : ${d.total_erros}`,
-            `Tempo gRPC total   : ${d.tempo_total_ms} ms`,
-            `Tempo HTTP total   : ${elapsed} ms`,
-            '',
-            'Arquivos:',
-            ...(d.arquivos_processados || []).map(f => `  · ${f}`),
+            `Servidor         : ${d.servidor}`,
+            `Exam ID          : ${d.exam_id}`,
+            `Total enviados   : ${d.total_enviados}`,
+            `Slices OK        : ${d.slices_ok}`,
+            `Tempo HTTP total : ${elapsed} ms`,
         ].join('\n'), 'success');
 
-        log(`Client Stream ✓ lote de ${d.total_processadas} imagens em ${elapsed}ms`, 'c');
+        log(`Client Stream ✓ lote de ${d.total_enviados} imagens (${d.slices_ok} ok) em ${elapsed}ms`, 'c');
     } catch (e) {
         setRes('c', `✗ Erro: ${e.message}`, 'fail');
         log(`Client Stream ✗ ${e.message}`, 'err');
@@ -670,7 +701,7 @@ async function callBidi() {
     const lines = [];
 
     try {
-        const r = await fetch('/api/bidirecional/preview-ao-vivo', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/bidirecional/preview-ao-vivo', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
 
         const reader = r.body.getReader();
