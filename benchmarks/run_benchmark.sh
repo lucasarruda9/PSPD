@@ -32,7 +32,7 @@ mkdir -p "$RESULTADOS"
 # Amostra DICOM (mesma entrada para as duas versoes)
 if [ ! -f "$AMOSTRA" ]; then
     echo "Gerando amostra DICOM..."
-    python3 "$DIR/gerar_amostra_dicom.py" "$AMOSTRA"
+    uv run --with pydicom --with numpy "$DIR/gerar_amostra_dicom.py" "$AMOSTRA"
 fi
 
 # Monta uma vez o corpo multipart/form-data (campo 'arquivo')
