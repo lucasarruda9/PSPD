@@ -34,8 +34,6 @@ services:
     build:
       context: ./modulo_rest_mirror
       dockerfile: Dockerfile.a
-    ports:
-      - "9001:9001"
     networks:
       - pspd-net
 
@@ -43,8 +41,6 @@ services:
     build:
       context: ./modulo_rest_mirror
       dockerfile: Dockerfile.b
-    ports:
-      - "9002:9002"
     networks:
       - pspd-net
 

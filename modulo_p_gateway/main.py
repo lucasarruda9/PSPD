@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-import grpc
+import grpc.aio
 from pathlib import Path
 import asyncio
 import time
@@ -28,30 +28,28 @@ STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+_canal_a = None
+_canal_b = None
+
 def get_anonymizer_stub():
-    canal = grpc.insecure_channel(GRPC_SERVER_A)
-    return medimg_pb2_grpc.AnonymizerStub(canal)
+    return medimg_pb2_grpc.AnonymizerStub(_canal_a)
 
 def get_pipeline_stub():
-    canal = grpc.insecure_channel(GRPC_SERVER_B)
-    return medimg_pb2_grpc.PipelineStub(canal)
-
-def wait_for_grpc_servers(timeout: int = 10):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            get_anonymizer_stub()
-            get_pipeline_stub()
-            print("✓ Conectado aos servidores gRPC")
-            return True
-        except Exception as e:
-            print(f"Aguardando servidores gRPC... ({int(time.time() - start)}s)")
-            time.sleep(0.5)
-    return False
+    return medimg_pb2_grpc.PipelineStub(_canal_b)
 
 @app.on_event("startup")
 async def startup_event():
-    await asyncio.to_thread(wait_for_grpc_servers)
+    global _canal_a, _canal_b
+    _canal_a = grpc.aio.insecure_channel(GRPC_SERVER_A, options=[('grpc.lb_policy_name', 'round_robin')])
+    _canal_b = grpc.aio.insecure_channel(GRPC_SERVER_B, options=[('grpc.lb_policy_name', 'round_robin')])
+    print("✓ Canais gRPC Assíncronos inicializados")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    if _canal_a:
+        await _canal_a.close()
+    if _canal_b:
+        await _canal_b.close()
 
 @app.get("/", include_in_schema=False)
 def index():
@@ -74,7 +72,7 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...)):
                 data=conteudo
             )
         )
-        resp = stub.Anonymize(req)
+        resp = await stub.Anonymize(req)
         
         return {
             "tipo": "unary",
@@ -88,7 +86,7 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...)):
                 "tags_removidas": list(resp.metadata.removed_phi_tags)
             }
         }
-    except grpc.RpcError as e:
+    except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
 @app.post("/api/server-stream/processar-etapas")
@@ -97,12 +95,12 @@ async def processar_etapas_stream(arquivo: UploadFile = File(...)):
         stub = get_pipeline_stub()
         req = medimg_pb2.ExamRequest(exam_id=arquivo.filename)
         
-        def gerar_respostas():
-            for resp in stub.ProcessExam(req):
+        async def gerar_respostas():
+            async for resp in stub.ProcessExam(req):
                 yield f"Processado Slice [{resp.slice.slice_id}] - {len(resp.slice.data)} bytes\n"
         
         return StreamingResponse(gerar_respostas(), media_type="text/plain")
-    except grpc.RpcError as e:
+    except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
 @app.post("/api/client-stream/processar-lote")
@@ -110,15 +108,16 @@ async def processar_lote_cliente(arquivos: list[UploadFile] = File(...)):
     try:
         stub = get_pipeline_stub()
         
-        def gerar_stream_grpc():
+        async def gerar_stream_grpc():
             for idx, arq in enumerate(arquivos):
+                conteudo = await arq.read()
                 yield medimg_pb2.Slice(
                     slice_id=arq.filename,
                     index=idx,
-                    data=arq.file.read()
+                    data=conteudo
                 )
                 
-        resp = stub.UploadExam(gerar_stream_grpc())
+        resp = await stub.UploadExam(gerar_stream_grpc())
         return {
             "tipo": "client_streaming",
             "servidor": "B (Pipeline)",
@@ -126,7 +125,7 @@ async def processar_lote_cliente(arquivos: list[UploadFile] = File(...)):
             "total_enviados": len(arquivos),
             "slices_ok": resp.slices_ok
         }
-    except grpc.RpcError as e:
+    except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
 @app.post("/api/bidirecional/preview-ao-vivo")
@@ -134,18 +133,19 @@ async def processar_preview_bidirecional(arquivos: list[UploadFile] = File(...))
     try:
         stub = get_pipeline_stub()
         
-        def gerar_stream_grpc():
+        async def gerar_stream_grpc():
             for idx, arq in enumerate(arquivos):
+                conteudo = await arq.read()
                 yield medimg_pb2.Slice(
                     slice_id=arq.filename,
                     index=idx,
-                    data=arq.file.read()
+                    data=conteudo
                 )
                 
-        def ler_respostas():
-            for resp in stub.LiveProcess(gerar_stream_grpc()):
+        async def ler_respostas():
+            async for resp in stub.LiveProcess(gerar_stream_grpc()):
                 yield f"[{resp.slice_id}] Etapa: {resp.stage}\n"
                 
         return StreamingResponse(ler_respostas(), media_type="text/plain")
-    except grpc.RpcError as e:
+    except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
