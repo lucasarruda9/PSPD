@@ -35,6 +35,7 @@ metadata:
   name: modulo-a-servidor
   namespace: pspd
 spec:
+  clusterIP: None
   selector:
     app: modulo-a
   ports:

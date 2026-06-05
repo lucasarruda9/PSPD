@@ -21,9 +21,9 @@ spec:
             - containerPort: 8000
           env:
             - name: GRPC_SERVER_A
-              value: "modulo-a-servidor:50051"
+              value: "dns:///modulo-a-servidor:50051"
             - name: GRPC_SERVER_B
-              value: "modulo-b-servidor:50052"
+              value: "dns:///modulo-b-servidor:50052"
           resources:
             requests:
               cpu: "100m"
