@@ -1,0 +1,139 @@
+# Versao espelho REST/JSON: gateway P' (:8001) + servidores A' (:9001) e B' (:9002).
+# O Service "modulo-rest-mirror" expoe a :8001 (alinhado ao scrape do monitoring.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modulo-rest-a
+  namespace: pspd
+  labels:
+    app: modulo-rest-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modulo-rest-a
+  template:
+    metadata:
+      labels:
+        app: modulo-rest-a
+    spec:
+      containers:
+        - name: modulo-rest-a
+          image: pspd/modulo-rest-a:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9001
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: modulo-rest-a
+  namespace: pspd
+spec:
+  selector:
+    app: modulo-rest-a
+  ports:
+    - protocol: TCP
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modulo-rest-b
+  namespace: pspd
+  labels:
+    app: modulo-rest-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modulo-rest-b
+  template:
+    metadata:
+      labels:
+        app: modulo-rest-b
+    spec:
+      containers:
+        - name: modulo-rest-b
+          image: pspd/modulo-rest-b:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9002
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: modulo-rest-b
+  namespace: pspd
+spec:
+  selector:
+    app: modulo-rest-b
+  ports:
+    - protocol: TCP
+      port: 9002
+      targetPort: 9002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modulo-rest-mirror
+  namespace: pspd
+  labels:
+    app: modulo-rest-mirror
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: modulo-rest-mirror
+  template:
+    metadata:
+      labels:
+        app: modulo-rest-mirror
+    spec:
+      containers:
+        - name: gateway
+          image: pspd/modulo-rest-mirror:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8001
+          env:
+            - name: REST_SERVER_A
+              value: "http://modulo-rest-a:9001"
+            - name: REST_SERVER_B
+              value: "http://modulo-rest-b:9002"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: modulo-rest-mirror
+  namespace: pspd
+spec:
+  type: NodePort
+  selector:
+    app: modulo-rest-mirror
+  ports:
+    - port: 8001
+      targetPort: 8001
+      nodePort: 30081

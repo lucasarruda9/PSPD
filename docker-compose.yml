@@ -29,6 +29,40 @@ services:
     networks:
       - pspd-net
 
+  # --- Versao espelho REST/JSON (modulo_rest_mirror) ---
+  modulo-rest-a:
+    build:
+      context: ./modulo_rest_mirror
+      dockerfile: Dockerfile.a
+    ports:
+      - "9001:9001"
+    networks:
+      - pspd-net
+
+  modulo-rest-b:
+    build:
+      context: ./modulo_rest_mirror
+      dockerfile: Dockerfile.b
+    ports:
+      - "9002:9002"
+    networks:
+      - pspd-net
+
+  modulo-rest-mirror:
+    build:
+      context: ./modulo_rest_mirror/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - REST_SERVER_A=http://modulo-rest-a:9001
+      - REST_SERVER_B=http://modulo-rest-b:9002
+    depends_on:
+      - modulo-rest-a
+      - modulo-rest-b
+    networks:
+      - pspd-net
+
 networks:
   pspd-net:
     driver: bridge
