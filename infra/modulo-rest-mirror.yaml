@@ -1,5 +1,3 @@
-# Versao espelho REST/JSON: gateway P' (:8001) + servidores A' (:9001) e B' (:9002).
-# O Service "modulo-rest-mirror" expoe a :8001 (alinhado ao scrape do monitoring.yaml).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

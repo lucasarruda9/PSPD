@@ -22,6 +22,7 @@ dependency_links.txt
 
 # Artefatos gerados pelo benchmark
 benchmarks/amostra.dcm
+benchmarks/dataset/
 benchmarks/resultados/
 benchmarks/.corpo_multipart.bin
 benchmarks/sample.png
