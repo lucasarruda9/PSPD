@@ -7,18 +7,15 @@ PROJETO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
-log "minikube com 3 nós"
-minikube start --nodes 3 --driver=docker --cpus=2 --memory=2048
+log "iniciando minikube"
+minikube start --nodes 3 --driver=docker
 
-log "metrics-server."
+log "habilitando métricas pro HPA"
 minikube addons enable metrics-server
 
-log "configurando ambiente docker"
-eval "$(minikube docker-env)"
-
-log "buildando imagens do gRPC backend dos servidores A e B"
-docker build -t "pspd-modulo-a-servidor:latest" -f "${PROJETO_ROOT}/modulo_a_servidor/Dockerfile" "${PROJETO_ROOT}/modulo_a_servidor"
-docker build -t "pspd-modulo-b-servidor:latest" -f "${PROJETO_ROOT}/modulo_b_servidor/Dockerfile" "${PROJETO_ROOT}/modulo_b_servidor"
+log "buildando imagens localmente para depois transferir ao cluster"
+docker build -t "pspd-modulo-a-servidor:latest" -f "${PROJETO_ROOT}/Servidores_GRPC/Dockerfile.a" "${PROJETO_ROOT}/Servidores_GRPC"
+docker build -t "pspd-modulo-b-servidor:latest" -f "${PROJETO_ROOT}/Servidores_GRPC/Dockerfile.b" "${PROJETO_ROOT}/Servidores_GRPC"
 
 log "buildando imagem do gateway"
 docker build -t "${REGISTRY_PREFIX}/modulo-p-gateway:latest" -f "${PROJETO_ROOT}/modulo_p_gateway/Dockerfile" "${PROJETO_ROOT}"
@@ -28,7 +25,15 @@ docker build -t "${REGISTRY_PREFIX}/modulo-rest-a:latest" -f "${PROJETO_ROOT}/mo
 docker build -t "${REGISTRY_PREFIX}/modulo-rest-b:latest" -f "${PROJETO_ROOT}/modulo_rest_mirror/Dockerfile.b" "${PROJETO_ROOT}/modulo_rest_mirror"
 docker build -t "${REGISTRY_PREFIX}/modulo-rest-mirror:latest" -f "${PROJETO_ROOT}/modulo_rest_mirror/gateway/Dockerfile" "${PROJETO_ROOT}/modulo_rest_mirror/gateway"
 
-log "Kubernetes..."
+log "transferindo imagem pra os 3 nós"
+minikube image load pspd-modulo-a-servidor:latest
+minikube image load pspd-modulo-b-servidor:latest
+minikube image load ${REGISTRY_PREFIX}/modulo-p-gateway:latest
+minikube image load ${REGISTRY_PREFIX}/modulo-rest-a:latest
+minikube image load ${REGISTRY_PREFIX}/modulo-rest-b:latest
+minikube image load ${REGISTRY_PREFIX}/modulo-rest-mirror:latest
+
+log "kubernetes"
 kubectl apply -f "${PROJETO_ROOT}/infra/namespace.yaml"
 kubectl apply -f "${PROJETO_ROOT}/infra/modulo-a.yaml"
 kubectl apply -f "${PROJETO_ROOT}/infra/modulo-b.yaml"
