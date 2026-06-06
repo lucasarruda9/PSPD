@@ -55,6 +55,9 @@ Navegador ──HTTP──▶ Gateway P ──▶ Servidor A (anonimização)
   ```bash
   sudo apt install -y python3
   ```
+- **minikube** e **kubectl** — apenas para o deploy opcional em Kubernetes:
+  - minikube: https://minikube.sigs.k8s.io/docs/start/
+  - kubectl: https://kubernetes.io/docs/tasks/tools/
 
 ---
 
@@ -85,11 +88,15 @@ docker compose down
 
 ### Kubernetes (Minikube) — opcional
 
-Os manifestos estão em [`infra/`](infra/) e o provisionamento do cluster local (com Prometheus/Grafana e autoscaling) é feito por:
+Os manifestos estão em [`infra/`](infra/). O provisionamento do cluster local é feito por um único script:
 
 ```bash
-bash infra/scripts/setup-cluster.sh
+bash infra/scripts/setup-minikube.sh
 ```
+
+Ele sobe um cluster Minikube com **3 nós**, builda e carrega as imagens dos seis serviços, aplica todos os módulos (gRPC e REST), o **autoscaling (HPA)** dos servidores A e B e o **monitoramento (Prometheus + Grafana)**. Ao final, imprime as URLs de acesso aos gateways e aos painéis.
+
+> Requer **minikube** e **kubectl** instalados (ver Pré-requisitos).
 
 ---
 
@@ -178,3 +185,4 @@ infra/                 Manifestos Kubernetes e script de provisionamento
 | 1.0 | 01/06/2026 | Backend gRPC (módulos P, A e B) e infraestrutura inicial (Docker e Kubernetes). |
 | 1.1 | 04/06/2026 | Versão espelho REST/JSON (P', A', B') e primeiro benchmark gRPC vs REST. |
 | 1.2 | 05/06/2026 | Dataset real do TCIA, benchmark dos 4 endpoints e seletor gRPC/REST na interface. Gateway gRPC assíncrono, isolamento das portas internas e headless services no Kubernetes. |
+| 1.3 | 06/06/2026 | Otimização da infraestrutura: Minikube multi-nó, build e carregamento de todas as imagens e deploy completo (módulos, HPA e monitoramento) num único script. |

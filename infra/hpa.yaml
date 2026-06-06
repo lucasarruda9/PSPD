@@ -7,7 +7,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: modulo-a-servidor
+    name: modulo-a-deployment
   minReplicas: 2
   maxReplicas: 6
   metrics:
@@ -27,7 +27,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: modulo-b-servidor
+    name: modulo-b-deployment
   minReplicas: 2
   maxReplicas: 6
   metrics:
