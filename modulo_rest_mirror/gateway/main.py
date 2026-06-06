@@ -1,3 +1,10 @@
+"""
+Gateway P' (versao espelho REST/JSON do Modulo P).
+
+Expoe os MESMOS 4 endpoints do gateway gRPC (mesmos paths e formatos de
+resposta), mas conversa com os servidores A' (:9001) e B' (:9002) por HTTP/JSON
+em vez de gRPC. O DICOM trafega em base64.
+"""
 import base64
 import json
 import os
@@ -20,7 +27,22 @@ app.add_middleware(
 REST_SERVER_A = os.getenv("REST_SERVER_A", "http://localhost:9001")
 REST_SERVER_B = os.getenv("REST_SERVER_B", "http://localhost:9002")
 
-TIMEOUT = httpx.Timeout(60.0)
+# Cliente HTTP persistente (reusa conexoes/keep-alive), criado no startup.
+# Espelha a decisao do gateway gRPC de reusar canais -> comparativo justo.
+cliente: httpx.AsyncClient = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    global cliente
+    cliente = httpx.AsyncClient(timeout=httpx.Timeout(60.0))
+    print("✓ Cliente HTTP persistente inicializado")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    if cliente:
+        await cliente.aclose()
 
 
 def b64(dados: bytes) -> str:
@@ -43,9 +65,8 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...)):
     conteudo = await arquivo.read()
     payload = {"slice_id": arquivo.filename, "index": 1, "data_b64": b64(conteudo)}
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
-            resp = await cliente.post(f"{REST_SERVER_A}/anonymize", json=payload)
-            resp.raise_for_status()
+        resp = await cliente.post(f"{REST_SERVER_A}/anonymize", json=payload)
+        resp.raise_for_status()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=503, detail=f"Erro REST (A'): {e}")
 
@@ -72,14 +93,13 @@ async def processar_etapas_stream(arquivo: UploadFile = File(...)):
     payload = {"exam_id": arquivo.filename}
 
     async def gerar_respostas():
-        async with httpx.AsyncClient(timeout=None) as cliente:
-            async with cliente.stream("POST", f"{REST_SERVER_B}/process-exam", json=payload) as resp:
-                async for linha in resp.aiter_lines():
-                    if not linha.strip():
-                        continue
-                    obj = json.loads(linha)
-                    tamanho = len(base64.b64decode(obj["data_b64"]))
-                    yield f"Processado Slice [{obj['slice_id']}] - {tamanho} bytes\n"
+        async with cliente.stream("POST", f"{REST_SERVER_B}/process-exam", json=payload, timeout=None) as resp:
+            async for linha in resp.aiter_lines():
+                if not linha.strip():
+                    continue
+                obj = json.loads(linha)
+                tamanho = len(base64.b64decode(obj["data_b64"]))
+                yield f"Processado Slice [{obj['slice_id']}] - {tamanho} bytes\n"
 
     return StreamingResponse(gerar_respostas(), media_type="text/plain")
 
@@ -92,9 +112,8 @@ async def processar_lote_cliente(arquivos: list[UploadFile] = File(...)):
         slices.append({"slice_id": arq.filename, "index": idx, "data_b64": b64(conteudo)})
 
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as cliente:
-            resp = await cliente.post(f"{REST_SERVER_B}/upload-exam", json={"slices": slices})
-            resp.raise_for_status()
+        resp = await cliente.post(f"{REST_SERVER_B}/upload-exam", json={"slices": slices})
+        resp.raise_for_status()
     except httpx.HTTPError as e:
         raise HTTPException(status_code=503, detail=f"Erro REST (B'): {e}")
 
@@ -116,12 +135,11 @@ async def processar_preview_bidirecional(arquivos: list[UploadFile] = File(...))
         slices.append({"slice_id": arq.filename, "index": idx, "data_b64": b64(conteudo)})
 
     async def ler_respostas():
-        async with httpx.AsyncClient(timeout=None) as cliente:
-            async with cliente.stream("POST", f"{REST_SERVER_B}/live-process", json={"slices": slices}) as resp:
-                async for linha in resp.aiter_lines():
-                    if not linha.strip():
-                        continue
-                    obj = json.loads(linha)
-                    yield f"[{obj['slice_id']}] Etapa: {obj['stage']}\n"
+        async with cliente.stream("POST", f"{REST_SERVER_B}/live-process", json={"slices": slices}, timeout=None) as resp:
+            async for linha in resp.aiter_lines():
+                if not linha.strip():
+                    continue
+                obj = json.loads(linha)
+                yield f"[{obj['slice_id']}] Etapa: {obj['stage']}\n"
 
     return StreamingResponse(ler_respostas(), media_type="text/plain")

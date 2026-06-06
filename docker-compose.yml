@@ -26,6 +26,8 @@ services:
       dockerfile: Dockerfile.b
     ports:
       - "50052:50052"
+    volumes:
+      - ./benchmarks/dataset:/app/dataset:ro
     networks:
       - pspd-net
 
@@ -41,6 +43,8 @@ services:
     build:
       context: ./modulo_rest_mirror
       dockerfile: Dockerfile.b
+    volumes:
+      - ./benchmarks/dataset:/app/dataset:ro
     networks:
       - pspd-net
 
