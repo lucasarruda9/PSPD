@@ -27,3 +27,6 @@ benchmarks/resultados/
 benchmarks/.corpo_multipart.bin
 benchmarks/sample.png
 benchmarks/resultado.txt
+
+url_grpc.txt
+url_rest.txt
