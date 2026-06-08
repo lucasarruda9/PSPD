@@ -139,6 +139,8 @@ O mesmo arquivo DICOM serve para qualquer card, só respeite a quantidade indica
 
 ### 2. Benchmark (gRPC vs REST)
 
+#### Local
+
 Com o ambiente no ar:
 
 ```bash
@@ -150,6 +152,17 @@ O script mede o tempo de resposta das duas versões nos 4 endpoints, sob a mesma
 ```bash
 REQUISICOES=500 CONCORRENCIA=50 bash benchmarks/run_benchmark.sh
 ```
+
+#### Kubernetes(Minikube)
+
+Para executar o benchmark com Minikube, você deve passar as URLs do gRPC e do REST. Isso pode ser feito de duas formas:
+
+* **Forma 1 (Passando as variáveis diretamente na linha de comando):**
+
+      GRPC_URL="url1" REST_URL="url2" bash benchmarks/run_benchmark.sh
+
+* **Forma 2:**
+  Abra o arquivo de script .sh e altere diretamente a porta correspondente para apontar para o link das portas.
 
 ### 3. Testes dos 4 tipos de chamada gRPC (Atividade B.1)
 
