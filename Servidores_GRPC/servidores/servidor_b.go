@@ -8,6 +8,7 @@ import (
     "io/ioutil"
     "log"
     "net"
+    "strings"
 
     "github.com/suyashkumar/dicom"
     "github.com/suyashkumar/dicom/pkg/tag"
@@ -165,7 +166,8 @@ func (s *serverB) UploadExam(stream pb.Pipeline_UploadExamServer) error {
         if err != nil {
             return err
         }
-        nomeDestinoArquivo := fmt.Sprintf("%s/upload_fatia_%s.dcm", DiretorioArquivos, fatiaRecebida.SliceId)
+        baseName := strings.TrimSuffix(fatiaRecebida.SliceId, ".dcm")
+        nomeDestinoArquivo := fmt.Sprintf("%s/upload_fatia_%s.dcm", DiretorioArquivos, baseName)
         _ = ioutil.WriteFile(nomeDestinoArquivo, fatiaRecebida.Data, 0644)
 
         quantidadeFatiasRecebidas++
