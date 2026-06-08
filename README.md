@@ -155,7 +155,7 @@ REQUISICOES=500 CONCORRENCIA=50 bash benchmarks/run_benchmark.sh
 
 #### Kubernetes(Minikube)
 
-Para executar o benchmark com Minikube, você deve passar as URLs do servidor A e do servidor B. Isso pode ser feito de duas formas:
+Para executar o benchmark com Minikube, você deve passar as URLs do gRPC e do servidor REST. Isso pode ser feito de duas formas:
 
 * **Forma 1:**
 Passando as variáveis diretamente na linha de comando:
