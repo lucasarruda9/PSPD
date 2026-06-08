@@ -15,14 +15,14 @@ minikube addons enable metrics-server
 
 log "buildando imagens localmente para depois transferir ao cluster"
 docker build -t "pspd-modulo-a-servidor:latest" -f "${PROJETO_ROOT}/Servidores_GRPC/Dockerfile.a" "${PROJETO_ROOT}/Servidores_GRPC"
-docker build -t "pspd-modulo-b-servidor:latest" -f "${PROJETO_ROOT}/Servidores_GRPC/Dockerfile.b" "${PROJETO_ROOT}/Servidores_GRPC"
+docker build -t "pspd-modulo-b-servidor:latest" -f "${PROJETO_ROOT}/Servidores_GRPC/Dockerfile.b" "${PROJETO_ROOT}"
 
 log "buildando imagem do gateway"
 docker build -t "${REGISTRY_PREFIX}/modulo-p-gateway:latest" -f "${PROJETO_ROOT}/modulo_p_gateway/Dockerfile" "${PROJETO_ROOT}"
 
 log "buildando imagens do espelho REST"
 docker build -t "${REGISTRY_PREFIX}/modulo-rest-a:latest" -f "${PROJETO_ROOT}/modulo_rest_mirror/Dockerfile.a" "${PROJETO_ROOT}/modulo_rest_mirror"
-docker build -t "${REGISTRY_PREFIX}/modulo-rest-b:latest" -f "${PROJETO_ROOT}/modulo_rest_mirror/Dockerfile.b" "${PROJETO_ROOT}/modulo_rest_mirror"
+docker build -t "${REGISTRY_PREFIX}/modulo-rest-b:latest" -f "${PROJETO_ROOT}/modulo_rest_mirror/Dockerfile.b" "${PROJETO_ROOT}"
 docker build -t "${REGISTRY_PREFIX}/modulo-rest-mirror:latest" -f "${PROJETO_ROOT}/modulo_rest_mirror/gateway/Dockerfile" "${PROJETO_ROOT}/modulo_rest_mirror/gateway"
 
 log "transferindo imagem pra os 3 nós"
