@@ -6,13 +6,16 @@ resposta), mas conversa com os servidores A' (:9001) e B' (:9002) por HTTP/JSON
 em vez de gRPC. O DICOM trafega em base64.
 """
 import base64
+import io
 import json
 import os
 
 import httpx
+import pydicom
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from PIL import Image
 
 app = FastAPI(title="Gateway REST Mirror (Modulo P')", version="1.0.0")
 
@@ -49,6 +52,38 @@ def b64(dados: bytes) -> str:
     return base64.b64encode(dados).decode("ascii")
 
 
+def _dicom_para_png_b64(dados: bytes):
+    """Renderiza os pixels de um DICOM em PNG (base64) para preview; None se falhar."""
+    try:
+        ds = pydicom.dcmread(io.BytesIO(dados), force=True)
+        arr = ds.pixel_array.astype("float32")
+        arr -= arr.min()
+        topo = float(arr.max())
+        if topo > 0:
+            arr = arr / topo * 255.0
+        imagem = Image.fromarray(arr.astype("uint8"))
+        buf = io.BytesIO()
+        imagem.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception as e:
+        print(f"[preview] falha ao renderizar PNG: {e}")
+        return None
+
+
+def _phi(dados: bytes):
+    """Extrai algumas tags de PHI de um DICOM, para mostrar o antes/depois."""
+    try:
+        ds = pydicom.dcmread(io.BytesIO(dados), force=True)
+        return {
+            "PatientName": str(ds.get("PatientName", "")),
+            "PatientID": str(ds.get("PatientID", "")),
+            "PatientBirthDate": str(ds.get("PatientBirthDate", "")),
+            "StudyDate": str(ds.get("StudyDate", "")),
+        }
+    except Exception:
+        return {}
+
+
 @app.get("/", include_in_schema=False)
 def index():
     return {"servico": "Gateway P' (REST mirror)", "servidor_a": REST_SERVER_A, "servidor_b": REST_SERVER_B}
@@ -61,7 +96,7 @@ def health_check():
 
 # unary: encaminha 1 imagem para o A' (/anonymize) e devolve o resumo.
 @app.post("/api/unary/processar-imagem")
-async def processar_imagem_unary(arquivo: UploadFile = File(...)):
+async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool = False):
     conteudo = await arquivo.read()
     payload = {"slice_id": arquivo.filename, "index": 1, "data_b64": b64(conteudo)}
     try:
@@ -73,7 +108,7 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...)):
     dados = resp.json()
     saida = base64.b64decode(dados["data_b64"])
     meta = dados["metadata"]
-    return {
+    resposta = {
         "tipo": "unary",
         "servidor": "A' (Anonymizer REST)",
         "arquivo": dados["slice_id"],
@@ -85,11 +120,18 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...)):
             "tags_removidas": meta["removed_phi_tags"],
         },
     }
+    if preview:
+        resposta["phi_antes"] = _phi(conteudo)
+        resposta["phi_depois"] = _phi(saida)
+        resposta["preview_antes_b64"] = _dicom_para_png_b64(conteudo)
+        resposta["preview_depois_b64"] = _dicom_para_png_b64(saida)
+        resposta["resultado_dcm_b64"] = dados["data_b64"]
+    return resposta
 
 
 # os endpoints de streaming consomem o NDJSON do B' e repassam linha a linha.
 @app.post("/api/server-stream/processar-etapas")
-async def processar_etapas_stream(arquivo: UploadFile = File(...)):
+async def processar_etapas_stream(arquivo: UploadFile = File(...), preview: bool = False):
     payload = {"exam_id": arquivo.filename}
 
     async def gerar_respostas():
@@ -98,10 +140,18 @@ async def processar_etapas_stream(arquivo: UploadFile = File(...)):
                 if not linha.strip():
                     continue
                 obj = json.loads(linha)
-                tamanho = len(base64.b64decode(obj["data_b64"]))
-                yield f"Processado Slice [{obj['slice_id']}] - {tamanho} bytes\n"
+                dados_slice = base64.b64decode(obj["data_b64"])
+                if preview:
+                    yield json.dumps({
+                        "slice_id": obj["slice_id"],
+                        "bytes": len(dados_slice),
+                        "png_b64": _dicom_para_png_b64(dados_slice),
+                    }) + "\n"
+                else:
+                    yield f"Processado Slice [{obj['slice_id']}] - {len(dados_slice)} bytes\n"
 
-    return StreamingResponse(gerar_respostas(), media_type="text/plain")
+    midia = "application/x-ndjson" if preview else "text/plain"
+    return StreamingResponse(gerar_respostas(), media_type=midia)
 
 
 @app.post("/api/client-stream/processar-lote")

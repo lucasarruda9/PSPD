@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-Baixa uma serie DICOM da colecao Pseudo-PHI-DICOM-Data do TCIA (REST API / NBIA),
-extrai os slices e prepara as entradas dos testes:
+Baixa varias series DICOM da colecao Pseudo-PHI-DICOM-Data do TCIA (REST API /
+NBIA), junta os slices em benchmarks/dataset/ e prepara as entradas dos testes:
 
   benchmarks/dataset/                      -> todos os slices (client/bidi)
   benchmarks/dataset/fatia1.dcm, fatia2.dcm -> lidos pelo Pipeline.ProcessExam
-  benchmarks/amostra.dcm                   -> 1 slice (unary / server-stream)
+  benchmarks/amostra.dcm                   -> 1 slice (unary)
 
 Usa SO a biblioteca padrao (urllib + zipfile) - nao precisa de pip.
 
 Uso:
-    python3 benchmarks/baixar_tcia.py
+    python3 benchmarks/baixar_tcia.py            # baixa TCIA_SERIES series
+    TCIA_SERIES=5 python3 benchmarks/baixar_tcia.py
 
 Variaveis de ambiente (opcionais):
     TCIA_API         forca uma base de API (tentada antes das padroes)
     TCIA_COLLECTION  colecao (default: Pseudo-PHI-DICOM-Data)
-    TCIA_SERIE       SeriesInstanceUID especifico (default: 1a serie util)
+    TCIA_SERIES      quantas series baixar (default: 3)
+    TCIA_SERIE       baixa apenas esta serie (SeriesInstanceUID)
 
 O script tenta varias bases conhecidas do TCIA e usa a primeira que responder
 JSON. Dataset sob licenca TCIA (Creative Commons) - citar a fonte no relatorio.
@@ -31,6 +33,7 @@ import urllib.request
 import zipfile
 
 COLECAO = os.getenv("TCIA_COLLECTION", "Pseudo-PHI-DICOM-Data")
+QTD_SERIES = int(os.getenv("TCIA_SERIES", "3"))
 DIR_DATASET = "benchmarks/dataset"
 AMOSTRA = "benchmarks/amostra.dcm"
 
@@ -45,7 +48,7 @@ BASES = [b for b in [
 
 def http_get(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "pspd-benchmark"})
-    with urllib.request.urlopen(req, timeout=180) as r:
+    with urllib.request.urlopen(req, timeout=300) as r:
         return r.read()
 
 
@@ -59,7 +62,7 @@ def descobrir_series():
             try:
                 corpo = http_get(url)
             except urllib.error.HTTPError as e:
-                erros.append(f"{base} (format={'json' in extra}) -> HTTP {e.code}")
+                erros.append(f"{base} -> HTTP {e.code}")
                 continue
             except Exception as e:
                 erros.append(f"{base} -> {e}")
@@ -70,60 +73,62 @@ def descobrir_series():
                 erros.append(f"{base} -> resposta nao-JSON: {corpo[:60]!r}")
                 continue
             if series:
-                print(f"API TCIA: {base}  ({len(series)} series)")
+                print(f"API TCIA: {base}  ({len(series)} series na colecao)")
                 return base, series
             erros.append(f"{base} -> lista vazia")
     sys.exit("Nao consegui listar series no TCIA. Tentativas:\n  " + "\n  ".join(erros))
 
 
-def escolher_serie(series) -> str:
-    uid = os.getenv("TCIA_SERIE")
-    if uid:
-        print(f"Serie (via TCIA_SERIE): {uid}")
-        return uid
-    # prefere uma serie com >= 2 imagens (para os fluxos de streaming)
-    for s in series:
-        if int(s.get("ImageCount", 0)) >= 2:
-            print(f"Serie: {s['SeriesInstanceUID']} ({s.get('ImageCount')} imagens)")
-            return s["SeriesInstanceUID"]
-    uid = series[0]["SeriesInstanceUID"]
-    print(f"Serie: {uid}")
-    return uid
-
-
-def baixar_serie(base: str, uid: str) -> list[str]:
+def baixar_serie(base: str, uid: str, prefixo: str) -> list[str]:
+    """Baixa uma serie e extrai os slices em DIR_DATASET com nome prefixado."""
     url = f"{base}/getImage?" + urllib.parse.urlencode({"SeriesInstanceUID": uid})
-    print("Baixando ZIP da serie...")
     conteudo = http_get(url)
-    if os.path.isdir(DIR_DATASET):
-        shutil.rmtree(DIR_DATASET)
-    os.makedirs(DIR_DATASET, exist_ok=True)
+    arquivos = []
     with zipfile.ZipFile(io.BytesIO(conteudo)) as z:
-        nomes = [n for n in z.namelist() if not n.endswith("/")]
-        z.extractall(DIR_DATASET)
-    arquivos = sorted(os.path.join(DIR_DATASET, n) for n in nomes)
-    print(f"{len(arquivos)} slice(s) extraido(s) em {DIR_DATASET}/")
-    return arquivos
-
-
-def preparar_entradas(arquivos) -> None:
-    if not arquivos:
-        sys.exit("A serie veio vazia.")
-    # 1 slice -> amostra do unary/server-stream
-    shutil.copyfile(arquivos[0], AMOSTRA)
-    print(f"Amostra (unary): {AMOSTRA}")
-    # 2 slices -> fatia1/fatia2, lidos pelo ProcessExam no servidor B
-    for i in range(min(2, len(arquivos))):
-        destino = os.path.join(DIR_DATASET, f"fatia{i + 1}.dcm")
-        shutil.copyfile(arquivos[i], destino)
-        print(f"Server-stream: {destino}")
+        for nome in z.namelist():
+            if nome.endswith("/"):
+                continue
+            destino = os.path.join(DIR_DATASET, f"{prefixo}_{os.path.basename(nome)}")
+            with z.open(nome) as src, open(destino, "wb") as dst:
+                dst.write(src.read())
+            arquivos.append(destino)
+    return sorted(arquivos)
 
 
 def main() -> None:
     base, series = descobrir_series()
-    uid = escolher_serie(series)
-    arquivos = baixar_serie(base, uid)
-    preparar_entradas(arquivos)
+
+    serie_unica = os.getenv("TCIA_SERIE")
+    if serie_unica:
+        escolhidas = [{"SeriesInstanceUID": serie_unica}]
+    else:
+        com_imagens = [s for s in series if int(s.get("ImageCount", 0)) >= 1]
+        escolhidas = (com_imagens or series)[:QTD_SERIES]
+
+    if os.path.isdir(DIR_DATASET):
+        shutil.rmtree(DIR_DATASET)
+    os.makedirs(DIR_DATASET, exist_ok=True)
+
+    todos = []
+    for k, s in enumerate(escolhidas, 1):
+        uid = s["SeriesInstanceUID"]
+        print(f"[{k}/{len(escolhidas)}] baixando serie {uid} ({s.get('ImageCount', '?')} imagens)...")
+        todos += baixar_serie(base, uid, f"s{k}")
+
+    if not todos:
+        sys.exit("As series vieram vazias.")
+    print(f"\nTotal: {len(todos)} slice(s) em {DIR_DATASET}/")
+
+    # 1 slice -> amostra do unary
+    shutil.copyfile(todos[0], AMOSTRA)
+    print(f"Amostra (unary): {AMOSTRA}")
+    # 2 fatias DISTINTAS (primeira e a do meio) -> ProcessExam (server-stream)
+    fatias = [todos[0], todos[len(todos) // 2]] if len(todos) > 1 else [todos[0], todos[0]]
+    for i, origem in enumerate(fatias, 1):
+        destino = os.path.join(DIR_DATASET, f"fatia{i}.dcm")
+        shutil.copyfile(origem, destino)
+        print(f"Server-stream: {destino}  (de {os.path.basename(origem)})")
+
     print("\nPronto. Entradas preparadas para unary, server-stream e client/bidi.")
 
 
