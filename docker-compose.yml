@@ -27,7 +27,7 @@ services:
     ports:
       - "50052:50052"
     volumes:
-      - ./benchmarks/dataset:/app/dataset:ro
+      - ./benchmarks/dataset:/app/dataset:rw
     networks:
       - pspd-net
 
@@ -44,7 +44,7 @@ services:
       context: ./modulo_rest_mirror
       dockerfile: Dockerfile.b
     volumes:
-      - ./benchmarks/dataset:/app/dataset:ro
+      - ./benchmarks/dataset:/app/dataset:rw
     networks:
       - pspd-net
 
