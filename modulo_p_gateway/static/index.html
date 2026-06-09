@@ -368,7 +368,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-u">
                     <input type="file" id="file-u" accept=".dcm">
-                    <div class="zone-ico">[DIR]</div>
+                    <div class="zone-ico">📂</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-u"></div>
@@ -391,17 +391,14 @@
                 <div class="cbadge a">Server A</div>
             </div>
             <div class="card-body">
-                <div class="zone" id="zone-s">
-                    <input type="file" id="file-s" accept=".dcm">
-                    <div class="zone-ico">[DIR]</div>
-                    <div class="zone-txt">Clique ou arraste uma imagem</div>
-                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
-                    <div class="zone-sel" id="sel-s"></div>
+                <div style="border: 1px solid var(--border); border-radius: var(--r); padding: 12px; margin-bottom: 12px; background: rgba(255,255,255,0.02);">
+                    <input type="text" id="input-exam-id" placeholder="Cole o ID do exame aqui..." 
+                        style="width: 100%; background: transparent; color: white; border: none; font-family: 'JetBrains Mono', monospace; text-align: center; font-size: 0.8rem;">
                 </div>
                 <button class="btn btn-s" id="btn-s" onclick="callServerStream()">
                     <div class="spin"></div><span class="lbl">&gt; Executar Server Stream</span>
                 </button>
-                <div class="res idle" id="res-s">Aguardando execução…</div>
+                <div class="res idle" id="res-s">Aguardando ID do exame…</div>
             </div>
         </div>
 
@@ -418,7 +415,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-c">
                     <input type="file" id="file-c" accept=".dcm" multiple>
-                    <div class="zone-ico">[DIRS]</div>
+                    <div class="zone-ico">📂</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-c"></div>
@@ -443,7 +440,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-b">
                     <input type="file" id="file-b" accept=".dcm" multiple>
-                    <div class="zone-ico">[DIRS]</div>
+                    <div class="zone-ico">📂</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-b"></div>
@@ -518,7 +515,7 @@ function appendRes(id, text) {
 }
 
 //Gerenciar seleção de arquivos e drag & drop
-['u','s','c','b'].forEach(k => {
+['u','c','b'].forEach(k => {
     const inp = $(`file-${k}`);
     const sel = $(`sel-${k}`);
     inp.addEventListener('change', () => {
@@ -606,20 +603,26 @@ async function callUnary() {
 
 //Server Streaming
 async function callServerStream() {
-    const file = $('file-s').files[0];
-    if (!file) { log('Selecione um arquivo para Server Streaming.', 'err'); return; }
+    const examId = $('input-exam-id').value.trim();
+    if (!examId) { 
+        log('Digite o ID do exame para prosseguir.', 'err'); 
+        return; 
+    }
 
     setLoading('btn-s', true);
     setRes('s', '', 'live');
-    log(`Server Stream -> "${file.name}" -> Server A`, 's');
+    log(`Iniciando Stream para ExamID: "${examId}"`, 's');
 
-    const form = new FormData();
-    form.append('arquivo', file);
     const t0 = Date.now();
     const lines = [];
 
     try {
-        const r = await fetch(BASE + '/api/server-stream/processar-etapas', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/server-stream/processar-etapas', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ exam_id: examId })
+        });
+        
         if (!r.ok) throw new Error(await r.text());
 
         const reader = r.body.getReader();
@@ -639,7 +642,7 @@ async function callServerStream() {
         const elapsed = Date.now() - t0;
         appendRes('s', `\nStream completo — ${lines.length} etapas em ${elapsed}ms`);
         $('res-s').className = 'res success';
-        log(`Server Stream ${lines.length} etapas em ${elapsed}ms`, 's');
+        log(`Server Stream concluído: ${lines.length} etapas em ${elapsed}ms`, 's');
     } catch (e) {
         setRes('s', `Erro: ${e.message}`, 'fail');
         log(`Server Stream Erro: ${e.message}`, 'err');
