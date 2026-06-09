@@ -31,7 +31,7 @@ services:
     networks:
       - pspd-net
 
-  # --- Versao espelho REST/JSON (modulo_rest_mirror) ---
+  # --- Versao REST/JSON (modulo_rest_mirror) ---
   modulo-rest-a:
     build:
       context: ./modulo_rest_mirror

@@ -361,14 +361,14 @@
                 <div class="cicon u">&gt;</div>
                 <div>
                     <div class="ctitle u">Anonimização (Unary)</div>
-                    <div class="csub">1 request → 1 response · Anonymize</div>
+                    <div class="csub">1 request → 1 response</div>
                 </div>
                 <div class="cbadge a">Server A</div>
             </div>
             <div class="card-body">
                 <div class="zone" id="zone-u">
                     <input type="file" id="file-u" accept=".dcm">
-                    <div class="zone-ico">[DIR]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-u"></div>
@@ -383,7 +383,6 @@
         <!-- Enhance: realce (unary do Server B) -->
         <div class="card">
             <div class="card-head">
-                <div class="cicon u">✦</div>
                 <div>
                     <div class="ctitle u">Realce (Unary)</div>
                     <div class="csub">1 request → 1 response · Enhance</div>
@@ -395,7 +394,7 @@
                     <input type="file" id="file-e" accept="image/*,.dcm">
                     <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
-                    <div class="zone-hint">PNG · JPG · DICOM</div>
+                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-e"></div>
                 </div>
                 <div style="display:flex;gap:14px;margin-bottom:.6rem;font-size:.74rem;color:var(--text-dim)">
@@ -404,7 +403,7 @@
                     <label><input type="checkbox" id="chk-inverter"> Inverter</label>
                 </div>
                 <button class="btn btn-u" id="btn-e" onclick="callEnhance()">
-                    <div class="spin"></div><span class="lbl">▶ Executar Realce</span>
+                    <div class="spin"></div><span class="lbl">&gt; Executar Realce</span>
                 </button>
                 <div class="res idle" id="res-e">Aguardando execução…</div>
             </div>
@@ -423,7 +422,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-s">
                     <input type="file" id="file-s" accept=".dcm">
-                    <div class="zone-ico">[DIR]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-s"></div>
@@ -448,7 +447,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-c">
                     <input type="file" id="file-c" accept=".dcm" multiple>
-                    <div class="zone-ico">[DIRS]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-c"></div>
@@ -473,7 +472,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-b">
                     <input type="file" id="file-b" accept=".dcm" multiple>
-                    <div class="zone-ico">[DIRS]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-b"></div>

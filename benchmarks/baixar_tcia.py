@@ -97,10 +97,9 @@ def main() -> None:
         sys.exit("As series vieram vazias.")
     print(f"\nTotal: {len(todos)} slice(s) em {DIR_DATASET}/")
 
-    # 1 slice -> amostra do unary
     shutil.copyfile(todos[0], AMOSTRA)
     print(f"Amostra (unary): {AMOSTRA}")
-    # 2 fatias DISTINTAS (primeira e a do meio) -> ProcessExam (server-stream)
+
     fatias = [todos[0], todos[len(todos) // 2]] if len(todos) > 1 else [todos[0], todos[0]]
     for i, origem in enumerate(fatias, 1):
         destino = os.path.join(DIR_DATASET, f"fatia{i}.dcm")
