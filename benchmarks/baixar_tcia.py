@@ -1,27 +1,3 @@
-#!/usr/bin/env python3
-"""
-Baixa varias series DICOM da colecao Pseudo-PHI-DICOM-Data do TCIA (REST API /
-NBIA), junta os slices em benchmarks/dataset/ e prepara as entradas dos testes:
-
-  benchmarks/dataset/                      -> todos os slices (client/bidi)
-  benchmarks/dataset/fatia1.dcm, fatia2.dcm -> lidos pelo Pipeline.ProcessExam
-  benchmarks/amostra.dcm                   -> 1 slice (unary)
-
-Usa SO a biblioteca padrao (urllib + zipfile) - nao precisa de pip.
-
-Uso:
-    python3 benchmarks/baixar_tcia.py            # baixa TCIA_SERIES series
-    TCIA_SERIES=5 python3 benchmarks/baixar_tcia.py
-
-Variaveis de ambiente (opcionais):
-    TCIA_API         forca uma base de API (tentada antes das padroes)
-    TCIA_COLLECTION  colecao (default: Pseudo-PHI-DICOM-Data)
-    TCIA_SERIES      quantas series baixar (default: 3)
-    TCIA_SERIE       baixa apenas esta serie (SeriesInstanceUID)
-
-O script tenta varias bases conhecidas do TCIA e usa a primeira que responder
-JSON. Dataset sob licenca TCIA (Creative Commons) - citar a fonte no relatorio.
-"""
 import io
 import json
 import os
@@ -79,16 +55,17 @@ def descobrir_series():
     sys.exit("Nao consegui listar series no TCIA. Tentativas:\n  " + "\n  ".join(erros))
 
 
-def baixar_serie(base: str, uid: str, prefixo: str) -> list[str]:
-    """Baixa uma serie e extrai os slices em DIR_DATASET com nome prefixado."""
+def baixar_serie(base: str, uid: str, subdir: str) -> list[str]:
+    """Baixa uma serie e extrai os slices numa subpasta propria (1 pasta = 1 exame)."""
     url = f"{base}/getImage?" + urllib.parse.urlencode({"SeriesInstanceUID": uid})
     conteudo = http_get(url)
+    os.makedirs(subdir, exist_ok=True)
     arquivos = []
     with zipfile.ZipFile(io.BytesIO(conteudo)) as z:
         for nome in z.namelist():
             if nome.endswith("/"):
                 continue
-            destino = os.path.join(DIR_DATASET, f"{prefixo}_{os.path.basename(nome)}")
+            destino = os.path.join(subdir, os.path.basename(nome))
             with z.open(nome) as src, open(destino, "wb") as dst:
                 dst.write(src.read())
             arquivos.append(destino)
@@ -112,8 +89,9 @@ def main() -> None:
     todos = []
     for k, s in enumerate(escolhidas, 1):
         uid = s["SeriesInstanceUID"]
-        print(f"[{k}/{len(escolhidas)}] baixando serie {uid} ({s.get('ImageCount', '?')} imagens)...")
-        todos += baixar_serie(base, uid, f"s{k}")
+        subdir = os.path.join(DIR_DATASET, f"serie{k:02d}")
+        print(f"[{k}/{len(escolhidas)}] serie {uid} ({s.get('ImageCount', '?')} imagens) -> {subdir}/")
+        todos += baixar_serie(base, uid, subdir)
 
     if not todos:
         sys.exit("As series vieram vazias.")

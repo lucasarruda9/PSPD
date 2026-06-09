@@ -43,6 +43,9 @@ def get_anonymizer_stub():
 def get_pipeline_stub():
     return medimg_pb2_grpc.PipelineStub(_canal_b)
 
+def get_enhancer_stub():
+    return medimg_pb2_grpc.EnhancerStub(_canal_b)
+
 @app.on_event("startup")
 async def startup_event():
     global _canal_a, _canal_b
@@ -97,6 +100,15 @@ def _phi(dados: bytes):
         return {}
 
 
+def _series_uid(dados: bytes) -> str:
+    """Le o SeriesInstanceUID do DICOM, usado como exam_id no server streaming."""
+    try:
+        ds = pydicom.dcmread(io.BytesIO(dados), force=True, stop_before_pixels=True)
+        return str(ds.get("SeriesInstanceUID", ""))
+    except Exception:
+        return ""
+
+
 @app.post("/api/unary/processar-imagem")
 async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool = False):
     try:
@@ -134,11 +146,42 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool 
     except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
+@app.post("/api/enhance/processar-imagem")
+async def processar_enhance_unary(arquivo: UploadFile = File(...), preview: bool = False,
+                                  contraste: bool = True, brilho: bool = False, inverter: bool = False):
+    try:
+        stub = get_enhancer_stub()
+        conteudo = await arquivo.read()
+        req = medimg_pb2.EnhanceRequest(
+            slice=medimg_pb2.Slice(slice_id=arquivo.filename, index=1, data=conteudo),
+            apply_clahe=contraste,
+            apply_normalize=brilho,
+            apply_denoise=inverter,
+        )
+        resp = await stub.Enhance(req)
+        processado = resp.slice.data
+        resposta = {
+            "tipo": "enhance",
+            "servidor": "B (Enhancer)",
+            "arquivo": resp.slice.slice_id,
+            "tamanho_entrada_bytes": len(conteudo),
+            "tamanho_saida_bytes": len(processado),
+        }
+        if preview:
+            resposta["preview_antes_b64"] = _dicom_para_png_b64(conteudo)
+            resposta["preview_depois_b64"] = _dicom_para_png_b64(processado)
+            resposta["resultado_dcm_b64"] = base64.b64encode(processado).decode("ascii")
+        return resposta
+    except grpc.aio.AioRpcError as e:
+        raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
+
 @app.post("/api/server-stream/processar-etapas")
 async def processar_etapas_stream(arquivo: UploadFile = File(...), preview: bool = False):
     try:
         stub = get_pipeline_stub()
-        req = medimg_pb2.ExamRequest(exam_id=arquivo.filename)
+        conteudo = await arquivo.read()
+        exam_id = _series_uid(conteudo) or arquivo.filename
+        req = medimg_pb2.ExamRequest(exam_id=exam_id)
         
         async def gerar_respostas():
             async for resp in stub.ProcessExam(req):
@@ -182,7 +225,7 @@ async def processar_lote_cliente(arquivos: list[UploadFile] = File(...)):
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
 @app.post("/api/bidirecional/preview-ao-vivo")
-async def processar_preview_bidirecional(arquivos: list[UploadFile] = File(...)):
+async def processar_preview_bidirecional(arquivos: list[UploadFile] = File(...), preview: bool = False):
     try:
         stub = get_pipeline_stub()
         
@@ -197,8 +240,12 @@ async def processar_preview_bidirecional(arquivos: list[UploadFile] = File(...))
                 
         async def ler_respostas():
             async for resp in stub.LiveProcess(gerar_stream_grpc()):
-                yield f"[{resp.slice_id}] Etapa: {resp.stage}\n"
+                if preview:
+                    yield json.dumps({"slice_id": resp.slice_id, "stage": resp.stage, "png_b64": _dicom_para_png_b64(resp.data)}) + "\n"
+                else:
+                    yield f"[{resp.slice_id}] Etapa: {resp.stage}\n"
                 
-        return StreamingResponse(ler_respostas(), media_type="text/plain")
+        midia = "application/x-ndjson" if preview else "text/plain"
+        return StreamingResponse(ler_respostas(), media_type=midia)
     except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")

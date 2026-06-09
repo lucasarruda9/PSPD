@@ -6,9 +6,11 @@ __pycache__/
 dist/
 build/
 
-# stubs gerados pelo protoc — não versionar
+# stubs gerados pelo protoc — não versionar (raiz e subpastas)
 *_pb2.py
 *_pb2_grpc.py
+**/*_pb2.py
+**/*_pb2_grpc.py
 
 # Go
 # (dependências do Go se necessário)

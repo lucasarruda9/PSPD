@@ -8,6 +8,10 @@ import (
     "io/ioutil"
     "log"
     "net"
+    "os"
+    "path/filepath"
+    "sort"
+    "strings"
 
     "github.com/suyashkumar/dicom"
     "github.com/suyashkumar/dicom/pkg/tag"
@@ -75,13 +79,72 @@ func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarB
 		bytesBrutosPixel[i+1] = byte((valorPixel >> 8) & 0xFF)
 	}
 
-    // Grava o arquivo DICOM atualizado na memória para retorno
     var bufferEscrita bytes.Buffer
     if err := dicom.Write(&bufferEscrita, dataset); err != nil {
         return nil, fmt.Errorf("erro ao serializar o dataset DICOM modificado: %v", err)
     }
 
     return bufferEscrita.Bytes(), nil
+}
+
+const MaxFatiasExame = 8 
+
+var indiceExames = map[string][]string{}
+
+func lerSeriesUID(dados []byte) string {
+	ds, err := dicom.Parse(bytes.NewReader(dados), int64(len(dados)), nil)
+	if err != nil {
+		return ""
+	}
+	el, err := ds.FindElementByTag(tag.Tag{Group: 0x0020, Element: 0x000E})
+	if err != nil {
+		return ""
+	}
+	if strs, ok := el.Value.GetValue().([]string); ok && len(strs) > 0 {
+		return strings.TrimSpace(strs[0])
+	}
+	return ""
+}
+
+func construirIndiceExames() {
+	indiceExames = map[string][]string{}
+	fatias := 0
+	_ = filepath.WalkDir(DiretorioArquivos, func(caminho string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		nome := strings.ToLower(d.Name())
+		if !strings.HasSuffix(nome, ".dcm") || strings.HasPrefix(nome, "fatia") || strings.HasPrefix(nome, "upload_") {
+			return nil
+		}
+		dados, err := os.ReadFile(caminho)
+		if err != nil {
+			return nil
+		}
+		if uid := lerSeriesUID(dados); uid != "" {
+			indiceExames[uid] = append(indiceExames[uid], caminho)
+			fatias++
+		}
+		return nil
+	})
+	for uid := range indiceExames {
+		sort.Strings(indiceExames[uid])
+	}
+	log.Printf("[Servidor B] Indice: %d exame(s), %d fatia(s)", len(indiceExames), fatias)
+}
+
+func arquivosDoExame(examID string) []string {
+	arquivos := indiceExames[examID]
+	if len(arquivos) == 0 {
+		return []string{
+			filepath.Join(DiretorioArquivos, "fatia1.dcm"),
+			filepath.Join(DiretorioArquivos, "fatia2.dcm"),
+		}
+	}
+	if len(arquivos) > MaxFatiasExame {
+		arquivos = arquivos[:MaxFatiasExame]
+	}
+	return arquivos
 }
 
 // unário
@@ -112,10 +175,7 @@ func (s *serverB) ProcessExam(requisicao *pb.ExamRequest, stream pb.Pipeline_Pro
     log.Printf("[Servidor B] Buscando lote de arquivos para o Exame ID: %s", requisicao.ExamId)
 
     // lê 
-    arquivosExame := []string{
-        fmt.Sprintf("%s/fatia1.dcm", DiretorioArquivos),
-        fmt.Sprintf("%s/fatia2.dcm", DiretorioArquivos),
-    }
+    arquivosExame := arquivosDoExame(requisicao.ExamId)
 
     for indice, caminhoArquivo := range arquivosExame {
         bytesOriginais, err := ioutil.ReadFile(caminhoArquivo)
@@ -195,6 +255,7 @@ func (s *serverB) LiveProcess(stream pb.Pipeline_LiveProcessServer) error {
             Index:     fatiaBruta.Index,
             Stage:     "Filtros de Nitidez e Brilho Aplicados com Sucesso",
             ElapsedMs: 0.0,
+            Data:      bytesTratados,
         }
 
         if err := stream.Send(eventoProgresso); err != nil {
@@ -208,6 +269,8 @@ func main() {
     if err != nil {
         log.Fatalf("Falha ao escutar a porta %s: %v", PortaServidorB, err)
     }
+
+    construirIndiceExames()
 
     servidorGrpc := grpc.NewServer()
     instanciaServidorB := &serverB{}
