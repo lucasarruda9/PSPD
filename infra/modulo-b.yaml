@@ -28,6 +28,14 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "250m"
+        volumeMounts:
+        - name: dataset-volume-grpc
+          mountPath: /app/dataset
+      volumes:
+      - name: dataset-volume-grpc
+        hostPath:
+          path: /home/lucas/Faculdade/PSPD/PSPD/benchmarks/dataset
+          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
