@@ -12,7 +12,7 @@ RUN go mod download
 
 COPY . .
 
-RUN make compile
+RUN make compile tidy
 
 RUN go build -o servidor_a servidores/servidor_a.go
 

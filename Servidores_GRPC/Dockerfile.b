@@ -12,13 +12,12 @@ RUN go mod download
 
 COPY Servidores_GRPC/ .
 
-RUN make compile
+RUN make compile tidy
 
 RUN go build -o servidor_b servidores/servidor_b.go
 
 FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/servidor_b .
-COPY benchmarks/dataset /app/dataset
 EXPOSE 50052
 CMD ["./servidor_b"]

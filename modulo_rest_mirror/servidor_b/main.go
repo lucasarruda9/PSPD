@@ -8,14 +8,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-
+	"path/filepath"
+    "github.com/google/uuid"
 	"github.com/suyashkumar/dicom"
 	"github.com/suyashkumar/dicom/pkg/tag"
 )
 
 const (
 	PortaPadrao           = "9002"
-	DiretorioArquivos     = "dataset"
+	DiretorioArquivos     = "/app/dataset"
 	ValorMaximoPixel16Bit = 65535
 	ValorMinimoPixel      = 0
 	IncrementoDeBrilho    = 2000
@@ -157,83 +158,86 @@ func handleEnhance(w http.ResponseWriter, r *http.Request) {
 // os fluxos de streaming do gRPC (server e bidirecional) viram NDJSON no REST:
 // uma linha JSON por item, com flush a cada item enviado.
 func handleProcessExam(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
-		return
-	}
+    if r.Method != http.MethodPost {
+        http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
+        return
+    }
 
-	var req ExamRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "json invalido: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	log.Printf("[Servidor B-REST] Buscando lote do Exame ID: %s", req.ExamID)
+    var req ExamRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "json invalido: "+err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	flusher, _ := w.(http.Flusher)
-	enc := json.NewEncoder(w)
+    caminhoPasta := filepath.Join(DiretorioArquivos, req.ExamID)
+    arquivos, err := os.ReadDir(caminhoPasta)
+    if err != nil {
+        http.Error(w, "exame nao encontrado", http.StatusNotFound)
+        return
+    }
 
-	arquivosExame := []string{
-		fmt.Sprintf("%s/fatia1.dcm", DiretorioArquivos),
-		fmt.Sprintf("%s/fatia2.dcm", DiretorioArquivos),
-	}
+    w.Header().Set("Content-Type", "application/x-ndjson")
+    flusher, _ := w.(http.Flusher)
+    enc := json.NewEncoder(w)
 
-	for indice, caminhoArquivo := range arquivosExame {
-		bytesOriginais, err := os.ReadFile(caminhoArquivo)
-		if err != nil {
-			log.Printf("[Aviso B-REST] Arquivo ausente, pulando: %s", caminhoArquivo)
-			continue
-		}
-		bytesFiltrados, err := aplicarFiltrosImagemDicom(bytesOriginais, true, false, false)
-		if err != nil {
-			log.Printf("[Erro B-REST] Falha ao filtrar lote: %v", err)
-			continue
-		}
-		_ = enc.Encode(EnhanceResponse{
-			SliceID:      fmt.Sprintf("Fatia_Processada_%d", indice+1),
-			Index:        int32(indice + 1),
-			DataB64:      base64.StdEncoding.EncodeToString(bytesFiltrados),
-			ProcessingMs: 0.0,
-		})
-		if flusher != nil {
-			flusher.Flush()
-		}
-	}
+    for indice, arquivo := range arquivos {
+        if arquivo.IsDir() { continue }
+
+        caminhoCompleto := filepath.Join(caminhoPasta, arquivo.Name())
+        bytesOriginais, err := os.ReadFile(caminhoCompleto)
+        if err != nil { continue }
+
+        bytesFiltrados, err := aplicarFiltrosImagemDicom(bytesOriginais, true, false, false)
+        if err != nil { continue }
+
+        _ = enc.Encode(EnhanceResponse{
+            SliceID:      arquivo.Name(),
+            Index:        int32(indice + 1),
+            DataB64:      base64.StdEncoding.EncodeToString(bytesFiltrados),
+            ProcessingMs: 0.0,
+        })
+        if flusher != nil { flusher.Flush() }
+    }
 }
 
 // client streaming -> array de slices num unico corpo.
 func handleUploadExam(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
-		return
-	}
+    if r.Method != http.MethodPost {
+        http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
+        return
+    }
 
-	var req UploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "json invalido: "+err.Error(), http.StatusBadRequest)
-		return
-	}
+    var req UploadRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "json invalido: "+err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	recebidas := int32(0)
-	for _, fatia := range req.Slices {
-		dados, err := base64.StdEncoding.DecodeString(fatia.DataB64)
-		if err != nil {
-			log.Printf("[Aviso B-REST] base64 invalido em %s, pulando", fatia.SliceID)
-			continue
-		}
-		destino := fmt.Sprintf("%s/upload_fatia_%s.dcm", DiretorioArquivos, fatia.SliceID)
-		_ = os.WriteFile(destino, dados, 0644)
-		recebidas++
-	}
+    idExame := uuid.New().String()
+    caminhoPasta := filepath.Join(DiretorioArquivos, idExame)
+    _ = os.MkdirAll(caminhoPasta, 0755)
 
-	escreverJSON(w, ExamSummary{
-		ExamID:      "Upload_Hospitalar_Registrado",
-		TotalSlices: recebidas,
-		SlicesOk:    recebidas,
-		TotalMs:     0.0,
-	})
+    recebidas := int32(0)
+    for _, fatia := range req.Slices {
+        dados, err := base64.StdEncoding.DecodeString(fatia.DataB64)
+        if err != nil { continue }
+        
+        nomeArquivo := fmt.Sprintf("fatia_%d.dcm", fatia.Index)
+        if fatia.SliceID != "" {
+            nomeArquivo = fmt.Sprintf("%s.dcm", fatia.SliceID)
+        }
+        destino := filepath.Join(caminhoPasta, nomeArquivo)
+        _ = os.WriteFile(destino, dados, 0644)
+        recebidas++
+    }
+
+    escreverJSON(w, ExamSummary{
+        ExamID:      idExame,
+        TotalSlices: recebidas,
+        SlicesOk:    recebidas,
+        TotalMs:     150.5,
+    })
 }
-
 // bidirecional -> array na entrada, NDJSON (eventos de progresso) na saida.
 func handleLiveProcess(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

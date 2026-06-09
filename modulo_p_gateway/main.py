@@ -11,6 +11,11 @@ import os
 import medimg_pb2
 import medimg_pb2_grpc
 
+from pydantic import BaseModel
+
+class ExamRequestSchema(BaseModel):
+    exam_id: str
+
 app = FastAPI(title="Gateway Módulo P - Processamento de Imagens DICOM", version="2.0.0")
 
 app.add_middleware(
@@ -90,10 +95,10 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
 @app.post("/api/server-stream/processar-etapas")
-async def processar_etapas_stream(arquivo: UploadFile = File(...)):
+async def processar_etapas_stream(request: ExamRequestSchema):
     try:
         stub = get_pipeline_stub()
-        req = medimg_pb2.ExamRequest(exam_id=arquivo.filename)
+        req = medimg_pb2.ExamRequest(exam_id=request.exam_id)
         
         async def gerar_respostas():
             async for resp in stub.ProcessExam(req):
