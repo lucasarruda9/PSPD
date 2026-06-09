@@ -282,7 +282,7 @@ func handleUploadExam(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[Aviso B-REST] base64 invalido em %s, pulando", fatia.SliceID)
 			continue
 		}
-		destino := fmt.Sprintf("%s/upload_fatia_%s.dcm", DiretorioArquivos, fatia.SliceID)
+		destino := fmt.Sprintf("%s/upload_fatia_%s.dcm", DiretorioArquivos, strings.TrimSuffix(fatia.SliceID, ".dcm"))
 		_ = os.WriteFile(destino, dados, 0644)
 		recebidas++
 	}

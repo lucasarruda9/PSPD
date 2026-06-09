@@ -313,7 +313,7 @@
 <header>
     <div class="header-inner">
         <a class="logo" href="/">
-            <div class="logo-icon">⚡</div>
+            <div class="logo-icon">PSPD</div>
             <div>
                 <div class="logo-name">PSPD Gateway</div>
                 <div class="logo-sub">Módulo P · UnB/FCTE — Eng. de Software</div>
@@ -328,7 +328,7 @@
             <div class="badge chk" id="badge-a"><div class="dot"></div>Server A</div>
             <div class="badge chk" id="badge-b"><div class="dot"></div>Server B</div>
         </div>
-        <a class="btn-docs" href="/docs" target="_blank">API Docs ↗</a>
+        <a class="btn-docs" href="/docs" target="_blank">API Docs</a>
     </div>
 </header>
 
@@ -342,14 +342,14 @@
 
     <!-- Arquitetura -->
     <div class="arch">
-        <div class="an client">🌐 Web Client</div>
-        <span class="arr">── HTTP/REST ──▶</span>
-        <div class="an gwt" id="arch-gw">⚡ gRPC Stub (P)</div>
+        <div class="an client">Web Client</div>
+        <span class="arr">── HTTP/REST ──&gt;</span>
+        <div class="an gwt" id="arch-gw">gRPC Stub (P)</div>
         <div class="sep"></div>
-        <span class="arr" id="arch-proto">▶ Proto ▶</span>
-        <div class="an sva" id="arch-sva">🔵 gRPC Server A</div>
+        <span class="arr" id="arch-proto">&gt; Proto &gt;</span>
+        <div class="an sva" id="arch-sva">gRPC Server A</div>
         <span class="arr">+</span>
-        <div class="an svb" id="arch-svb">🔴 gRPC Server B</div>
+        <div class="an svb" id="arch-svb">gRPC Server B</div>
     </div>
 
     <!-- Grid de chamadas -->
@@ -358,7 +358,7 @@
         <!-- Unary: 1 imagem → 1 resposta -->
         <div class="card">
             <div class="card-head">
-                <div class="cicon u">➤</div>
+                <div class="cicon u">&gt;</div>
                 <div>
                     <div class="ctitle u">Anonimização (Unary)</div>
                     <div class="csub">1 request → 1 response · Anonymize</div>
@@ -367,14 +367,14 @@
             </div>
             <div class="card-body">
                 <div class="zone" id="zone-u">
-                    <input type="file" id="file-u" accept="image/*,.dcm">
-                    <div class="zone-ico">📁</div>
+                    <input type="file" id="file-u" accept=".dcm">
+                    <div class="zone-ico">[DIR]</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
-                    <div class="zone-hint">PNG · JPG · DICOM</div>
+                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-u"></div>
                 </div>
                 <button class="btn btn-u" id="btn-u" onclick="callUnary()">
-                    <div class="spin"></div><span class="lbl">▶ Executar Unary</span>
+                    <div class="spin"></div><span class="lbl">&gt; Executar Unary</span>
                 </button>
                 <div class="res idle" id="res-u">Aguardando execução…</div>
             </div>
@@ -413,7 +413,7 @@
         <!-- Server Streaming: etapas em tempo real -->
         <div class="card">
             <div class="card-head">
-                <div class="cicon s">⟹</div>
+                <div class="cicon s">=&gt;</div>
                 <div>
                     <div class="ctitle s">Server Streaming</div>
                     <div class="csub">1 request → stream de etapas</div>
@@ -422,14 +422,14 @@
             </div>
             <div class="card-body">
                 <div class="zone" id="zone-s">
-                    <input type="file" id="file-s" accept="image/*,.dcm">
-                    <div class="zone-ico">📁</div>
+                    <input type="file" id="file-s" accept=".dcm">
+                    <div class="zone-ico">[DIR]</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
-                    <div class="zone-hint">PNG · JPG · DICOM</div>
+                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-s"></div>
                 </div>
                 <button class="btn btn-s" id="btn-s" onclick="callServerStream()">
-                    <div class="spin"></div><span class="lbl">▶ Executar Server Stream</span>
+                    <div class="spin"></div><span class="lbl">&gt; Executar Server Stream</span>
                 </button>
                 <div class="res idle" id="res-s">Aguardando execução…</div>
             </div>
@@ -438,7 +438,7 @@
         <!-- Client Streaming: múltiplas imagens → 1 resumo -->
         <div class="card">
             <div class="card-head">
-                <div class="cicon c">⤳</div>
+                <div class="cicon c">~&gt;</div>
                 <div>
                     <div class="ctitle c">Client Streaming</div>
                     <div class="csub">stream de requests → 1 response</div>
@@ -447,14 +447,14 @@
             </div>
             <div class="card-body">
                 <div class="zone" id="zone-c">
-                    <input type="file" id="file-c" accept="image/*,.dcm" multiple>
-                    <div class="zone-ico">📂</div>
+                    <input type="file" id="file-c" accept=".dcm" multiple>
+                    <div class="zone-ico">[DIRS]</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
-                    <div class="zone-hint">Selecione 2 ou mais arquivos</div>
+                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-c"></div>
                 </div>
                 <button class="btn btn-c" id="btn-c" onclick="callClientStream()">
-                    <div class="spin"></div><span class="lbl">▶ Executar Client Stream</span>
+                    <div class="spin"></div><span class="lbl">&gt; Executar Client Stream</span>
                 </button>
                 <div class="res idle" id="res-c">Aguardando execução…</div>
             </div>
@@ -463,7 +463,7 @@
         <!-- Bidirecional: stream ↔ stream em tempo real -->
         <div class="card">
             <div class="card-head">
-                <div class="cicon b">⇄</div>
+                <div class="cicon b">&lt;-&gt;</div>
                 <div>
                     <div class="ctitle b">Bidirecional</div>
                     <div class="csub">stream ⇄ stream em tempo real</div>
@@ -472,14 +472,14 @@
             </div>
             <div class="card-body">
                 <div class="zone" id="zone-b">
-                    <input type="file" id="file-b" accept="image/*,.dcm" multiple>
-                    <div class="zone-ico">📂</div>
+                    <input type="file" id="file-b" accept=".dcm" multiple>
+                    <div class="zone-ico">[DIRS]</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
-                    <div class="zone-hint">Selecione 2 ou mais arquivos</div>
+                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-b"></div>
                 </div>
                 <button class="btn btn-b" id="btn-b" onclick="callBidi()">
-                    <div class="spin"></div><span class="lbl">▶ Executar Bidirecional</span>
+                    <div class="spin"></div><span class="lbl">&gt; Executar Bidirecional</span>
                 </button>
                 <div class="res idle" id="res-b">Aguardando execução…</div>
             </div>
@@ -508,10 +508,10 @@ function setBackend(btn) {
     btn.classList.add('active');
     const rest = btn.dataset.base === 'REST';
     BASE = rest ? `${location.protocol}//${location.hostname}:8001` : '';
-    $('arch-gw').textContent    = rest ? "🌐 REST Gateway (P')" : '⚡ gRPC Stub (P)';
-    $('arch-proto').textContent = rest ? '▶ JSON ▶' : '▶ Proto ▶';
-    $('arch-sva').textContent   = rest ? "🔵 REST Server A'" : '🔵 gRPC Server A';
-    $('arch-svb').textContent   = rest ? "🔴 REST Server B'" : '🔴 gRPC Server B';
+    $('arch-gw').textContent    = rest ? "REST Gateway (P')" : 'gRPC Stub (P)';
+    $('arch-proto').textContent = rest ? '> JSON >' : '> Proto >';
+    $('arch-sva').textContent   = rest ? "REST Server A'" : 'gRPC Server A';
+    $('arch-svb').textContent   = rest ? "REST Server B'" : 'gRPC Server B';
     log(`Backend: ${btn.textContent.trim()} ${BASE ? '('+BASE+')' : '(gRPC · mesma origem)'}`, 'info');
     checkHealth();
 }
@@ -554,8 +554,8 @@ function appendRes(id, text) {
     inp.addEventListener('change', () => {
         const files = [...inp.files];
         sel.textContent = files.length === 0 ? ''
-            : files.length === 1 ? `📎 ${files[0].name}`
-            : `📎 ${files.length} arquivos selecionados`;
+            : files.length === 1 ? `${files[0].name}`
+            : `${files.length} arquivos selecionados`;
     });
 
     //Suportar arrastar e soltar
@@ -599,7 +599,7 @@ async function callUnary() {
 
     setLoading('btn-u', true);
     setRes('u', 'Enviando requisição ao Server A…', 'live');
-    log(`Unary → "${file.name}" → Server A`, 'u');
+    log(`Unary -> "${file.name}" -> Server A`, 'u');
 
     const form = new FormData();
     form.append('arquivo', file);
@@ -656,10 +656,10 @@ async function callUnary() {
             elU.appendChild(link);
         }
 
-        log(`Unary ✓ concluído em ${elapsed}ms`, 'u');
+        log(`Unary concluído em ${elapsed}ms`, 'u');
     } catch (e) {
-        setRes('u', `✗ Erro: ${e.message}`, 'fail');
-        log(`Unary ✗ ${e.message}`, 'err');
+        setRes('u', `Erro: ${e.message}`, 'fail');
+        log(`Unary Erro: ${e.message}`, 'err');
     } finally {
         setLoading('btn-u', false);
     }
@@ -792,8 +792,8 @@ async function callServerStream() {
         elS.className = 'res success';
         log(`Server Stream ✓ ${n} fatias em ${elapsed}ms`, 's');
     } catch (e) {
-        setRes('s', `✗ Erro: ${e.message}`, 'fail');
-        log(`Server Stream ✗ ${e.message}`, 'err');
+        setRes('s', `Erro: ${e.message}`, 'fail');
+        log(`Server Stream Erro: ${e.message}`, 'err');
     } finally {
         setLoading('btn-s', false);
     }
@@ -806,7 +806,7 @@ async function callClientStream() {
 
     setLoading('btn-c', true);
     setRes('c', `Enviando ${files.length} arquivo(s) ao Server B…`, 'live');
-    log(`Client Stream → ${files.length} arquivo(s) → Server B`, 'c');
+    log(`Client Stream -> ${files.length} arquivo(s) -> Server B`, 'c');
 
     const form = new FormData();
     [...files].forEach(f => form.append('arquivos', f));
@@ -819,7 +819,7 @@ async function callClientStream() {
         const elapsed = Date.now() - t0;
 
         setRes('c', [
-            '✓ Lote processado',
+            'Lote processado',
             '',
             `Servidor         : ${d.servidor}`,
             `Exam ID          : ${d.exam_id}`,
@@ -828,10 +828,10 @@ async function callClientStream() {
             `Tempo HTTP total : ${elapsed} ms`,
         ].join('\n'), 'success');
 
-        log(`Client Stream ✓ lote de ${d.total_enviados} imagens (${d.slices_ok} ok) em ${elapsed}ms`, 'c');
+        log(`Client Stream lote de ${d.total_enviados} imagens (${d.slices_ok} ok) em ${elapsed}ms`, 'c');
     } catch (e) {
-        setRes('c', `✗ Erro: ${e.message}`, 'fail');
-        log(`Client Stream ✗ ${e.message}`, 'err');
+        setRes('c', `Erro: ${e.message}`, 'fail');
+        log(`Client Stream Erro: ${e.message}`, 'err');
     } finally {
         setLoading('btn-c', false);
     }
@@ -899,8 +899,8 @@ async function callBidi() {
         elB.className = 'res success';
         log(`Bidirecional ✓ ${n} fatias em ${elapsed}ms`, 'b');
     } catch (e) {
-        setRes('b', `✗ Erro: ${e.message}`, 'fail');
-        log(`Bidirecional ✗ ${e.message}`, 'err');
+        setRes('b', `Erro: ${e.message}`, 'fail');
+        log(`Bidirecional Erro: ${e.message}`, 'err');
     } finally {
         setLoading('btn-b', false);
     }

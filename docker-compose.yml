@@ -22,12 +22,12 @@ services:
 
   modulo-b-servidor:
     build:
-      context: ./Servidores_GRPC
-      dockerfile: Dockerfile.b
+      context: .
+      dockerfile: Servidores_GRPC/Dockerfile.b
     ports:
       - "50052:50052"
     volumes:
-      - ./benchmarks/dataset:/app/dataset:ro
+      - ./benchmarks/dataset:/app/dataset:rw
     networks:
       - pspd-net
 
@@ -41,10 +41,10 @@ services:
 
   modulo-rest-b:
     build:
-      context: ./modulo_rest_mirror
-      dockerfile: Dockerfile.b
+      context: .
+      dockerfile: modulo_rest_mirror/Dockerfile.b
     volumes:
-      - ./benchmarks/dataset:/app/dataset:ro
+      - ./benchmarks/dataset:/app/dataset:rw
     networks:
       - pspd-net
 
