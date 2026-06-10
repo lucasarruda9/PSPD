@@ -105,14 +105,15 @@ Ele sobe um cluster Minikube com **3 nós**, builda e carrega as imagens dos sei
 As imagens de teste vêm da coleção **Pseudo-PHI-DICOM-Data** do **TCIA** (imagens reais com dados de paciente sintéticos, próprias para testar anonimização). Para baixar:
 
 ```bash
-python3 benchmarks/baixar_tcia.py
+python3 benchmarks/baixar_tcia.py                  # 3 séries (padrão)
+TCIA_SERIES=10 python3 benchmarks/baixar_tcia.py   # mais séries = mais imagens
 ```
 
-O script baixa uma série e prepara:
+Cada **série** é um exame com **várias fatias** (`.dcm`). O script baixa `TCIA_SERIES` séries e prepara:
 
-- `benchmarks/amostra.dcm` — uma imagem (para os testes individuais);
-- `benchmarks/dataset/` — a série completa (várias imagens);
-- `benchmarks/dataset/fatia1.dcm` e `fatia2.dcm` — usadas pelo Server Streaming.
+- `benchmarks/dataset/serieNN/` — uma **pasta por exame**, com suas fatias;
+- `benchmarks/amostra.dcm` — uma fatia avulsa (para o teste unary);
+- `benchmarks/dataset/fatia1.dcm` e `fatia2.dcm` — fallback do Server Streaming.
 
 > Os arquivos DICOM **não** vão para o repositório (são grandes e têm licença do TCIA). Caso não queira baixar, o benchmark gera uma amostra sintética automaticamente.
 
@@ -133,9 +134,11 @@ Cada card representa um tipo de comunicação. Arraste um (ou mais) arquivo `.dc
 | **Client Streaming** | B (pipeline) | 2 ou mais |
 | **Bidirecional** | B (pipeline) | 2 ou mais |
 
-> **Observação sobre o Server Streaming:** este endpoint **não processa o arquivo enviado**, ele serve apenas como gatilho. O servidor lê duas imagens já presentes no seu disco (`dataset/fatia1.dcm` e `fatia2.dcm`) e as devolve em fluxo. Por isso a saída não corresponde ao arquivo que você subiu. Os demais cards usam de fato o arquivo enviado.
+> **Observação sobre o Server Streaming:** ao subir uma fatia, o gateway lê o `SeriesInstanceUID` dela e o servidor B devolve em fluxo as **outras fatias do mesmo exame** (até 8), a partir de um índice que monta do `dataset/` no startup. Por isso a fatia enviada não volta sozinha — volta o exame ao qual ela pertence. Se a fatia não estiver no dataset, usa o fallback `fatia1.dcm`/`fatia2.dcm`.
 
 O mesmo arquivo DICOM serve para qualquer card, só respeite a quantidade indicada.
+
+No card **Unary**, o resultado mostra a imagem **antes e depois**, os **dados do paciente anonimizados** (ex.: `DOE^JOHN → Anonimo_1`) e um botão para **baixar o DICOM processado**. O **Server Streaming** exibe as fatias do exame já filtradas.
 
 ### 2. Benchmark (gRPC vs REST)
 
@@ -200,3 +203,4 @@ infra/                 Manifestos Kubernetes e script de provisionamento
 | 1.1 | 04/06/2026 | Versão espelho REST/JSON (P', A', B') e primeiro benchmark gRPC vs REST. |
 | 1.2 | 05/06/2026 | Dataset real do TCIA, benchmark dos 4 endpoints e seletor gRPC/REST na interface. Gateway gRPC assíncrono, isolamento das portas internas e headless services no Kubernetes. |
 | 1.3 | 06/06/2026 | Otimização da infraestrutura: Minikube multi-nó, build e carregamento de todas as imagens e deploy completo (módulos, HPA e monitoramento) num único script. |
+| 1.4 | 07/06/2026 | Preview do resultado na interface (antes/depois, paciente anonimizado e download); Server Streaming por `SeriesInstanceUID` (devolve as fatias do exame); dataset com múltiplas séries organizadas em pastas. |

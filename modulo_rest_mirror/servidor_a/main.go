@@ -49,8 +49,7 @@ func substituirTag(d *dicom.Dataset, t tag.Tag, valores []string) {
 	d.Elements = append(d.Elements, elem)
 }
 
-// processa o DICOM, substituindo as tags de PHI e censurando 
-// a tarja de pixels. Mesma logica do gRPC Server A.
+
 func anonimizar(dados []byte, index int32) ([]byte, Metadata, string, error) {
 	dataset, err := dicom.Parse(bytes.NewReader(dados), int64(len(dados)), nil)
 	if err != nil {
@@ -119,8 +118,7 @@ func anonimizar(dados []byte, index int32) ([]byte, Metadata, string, error) {
 	return buf.Bytes(), meta, idAnonimo, nil
 }
 
-// handleAnonymize e o endpoint REST. Recebe o DICOM em base64 no JSON,
-// chama anonimizar e devolve o resultado em JSON+base64.
+
 func handleAnonymize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
@@ -164,7 +162,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok","servidor":"A-REST"}`))
 }
 
-// registra as rotas e sobe o servidor HTTP (porta padrao 9001).
+
 func main() {
 	porta := os.Getenv("PORT")
 	if porta == "" {

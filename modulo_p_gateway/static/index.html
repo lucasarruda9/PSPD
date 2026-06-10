@@ -360,7 +360,7 @@
             <div class="card-head">
                 <div class="cicon u">&gt;</div>
                 <div>
-                    <div class="ctitle u">Chamada Unary</div>
+                    <div class="ctitle u">Anonimização (Unary)</div>
                     <div class="csub">1 request → 1 response</div>
                 </div>
                 <div class="cbadge a">Server A</div>
@@ -368,7 +368,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-u">
                     <input type="file" id="file-u" accept=".dcm">
-                    <div class="zone-ico">[DIR]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-u"></div>
@@ -380,6 +380,35 @@
             </div>
         </div>
 
+        <!-- Enhance: realce (unary do Server B) -->
+        <div class="card">
+            <div class="card-head">
+                <div>
+                    <div class="ctitle u">Realce (Unary)</div>
+                    <div class="csub">1 request → 1 response · Enhance</div>
+                </div>
+                <div class="cbadge b">Server B</div>
+            </div>
+            <div class="card-body">
+                <div class="zone" id="zone-e">
+                    <input type="file" id="file-e" accept="image/*,.dcm">
+                    <div class="zone-ico">📁</div>
+                    <div class="zone-txt">Clique ou arraste uma imagem</div>
+                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
+                    <div class="zone-sel" id="sel-e"></div>
+                </div>
+                <div style="display:flex;gap:14px;margin-bottom:.6rem;font-size:.74rem;color:var(--text-dim)">
+                    <label><input type="checkbox" id="chk-contraste" checked> Contraste</label>
+                    <label><input type="checkbox" id="chk-brilho"> Brilho</label>
+                    <label><input type="checkbox" id="chk-inverter"> Inverter</label>
+                </div>
+                <button class="btn btn-u" id="btn-e" onclick="callEnhance()">
+                    <div class="spin"></div><span class="lbl">&gt; Executar Realce</span>
+                </button>
+                <div class="res idle" id="res-e">Aguardando execução…</div>
+            </div>
+        </div>
+
         <!-- Server Streaming: etapas em tempo real -->
         <div class="card">
             <div class="card-head">
@@ -388,12 +417,12 @@
                     <div class="ctitle s">Server Streaming</div>
                     <div class="csub">1 request → stream de etapas</div>
                 </div>
-                <div class="cbadge a">Server A</div>
+                <div class="cbadge b">Server B</div>
             </div>
             <div class="card-body">
                 <div class="zone" id="zone-s">
                     <input type="file" id="file-s" accept=".dcm">
-                    <div class="zone-ico">[DIR]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste uma imagem</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-s"></div>
@@ -418,7 +447,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-c">
                     <input type="file" id="file-c" accept=".dcm" multiple>
-                    <div class="zone-ico">[DIRS]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-c"></div>
@@ -443,7 +472,7 @@
             <div class="card-body">
                 <div class="zone" id="zone-b">
                     <input type="file" id="file-b" accept=".dcm" multiple>
-                    <div class="zone-ico">[DIRS]</div>
+                    <div class="zone-ico">📁</div>
                     <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
                     <div class="zone-hint">Apenas .DCM (DICOM)</div>
                     <div class="zone-sel" id="sel-b"></div>
@@ -518,7 +547,7 @@ function appendRes(id, text) {
 }
 
 //Gerenciar seleção de arquivos e drag & drop
-['u','s','c','b'].forEach(k => {
+['u','s','c','b','e'].forEach(k => {
     const inp = $(`file-${k}`);
     const sel = $(`sel-${k}`);
     inp.addEventListener('change', () => {
@@ -576,24 +605,55 @@ async function callUnary() {
     const t0 = Date.now();
 
     try {
-        const r = await fetch(BASE + '/api/unary/processar-imagem', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/unary/processar-imagem?preview=1', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
         const d = await r.json();
         const elapsed = Date.now() - t0;
 
-        setRes('u', [
-            'Processamento concluído',
+        const elU = $('res-u');
+        elU.className = 'res success';
+        elU.innerHTML = '';
+        elU.style.maxHeight = 'none';
+        const infoU = document.createElement('div');
+        infoU.textContent = [
+            '✓ Processamento concluído',
             '',
-            `Arquivo        : ${d.arquivo}`,
             `Servidor       : ${d.servidor}`,
-            `Modalidade     : ${d.metadados?.modalidade}`,
             `Resolução      : ${d.metadados?.resolucao}`,
-            `Tempo HTTP total: ${elapsed} ms`,
             `Tamanho entrada: ${d.tamanho_entrada_bytes} bytes`,
-            `Tamanho saida  : ${d.tamanho_saida_bytes} bytes`,
-            '',
-            `Tags Removidas : ${(d.metadados?.tags_removidas || []).join(', ')}`
-        ].join('\n'), 'success');
+            `Tamanho saída  : ${d.tamanho_saida_bytes} bytes`,
+            `Tags removidas : ${(d.metadados?.tags_removidas || []).length}`,
+            `Tempo HTTP     : ${elapsed} ms`,
+        ].join('\n');
+        elU.appendChild(infoU);
+
+        if (d.phi_antes && d.phi_depois) {
+            const phi = document.createElement('div');
+            phi.style.cssText = 'margin-top:8px;font-size:.7rem;line-height:1.7';
+            phi.innerHTML = '<div style="color:#8da0b8">Dados do paciente (anonimização):</div>' +
+                `<div>Nome  : <span style="color:#fca5a5">${d.phi_antes.PatientName || '—'}</span> → <span style="color:#6ee7b7">${d.phi_depois.PatientName || '—'}</span></div>` +
+                `<div>ID    : <span style="color:#fca5a5">${d.phi_antes.PatientID || '—'}</span> → <span style="color:#6ee7b7">${d.phi_depois.PatientID || '—'}</span></div>` +
+                `<div>Nasc. : <span style="color:#fca5a5">${d.phi_antes.PatientBirthDate || '—'}</span> → <span style="color:#6ee7b7">${d.phi_depois.PatientBirthDate || '—'}</span></div>`;
+            elU.appendChild(phi);
+        }
+
+        if (d.preview_antes_b64 && d.preview_depois_b64) {
+            const imgs = document.createElement('div');
+            imgs.style.cssText = 'display:flex;gap:10px;margin-top:8px;flex-wrap:wrap';
+            imgs.innerHTML =
+                `<figure style="margin:0"><img src="data:image/png;base64,${d.preview_antes_b64}" style="width:240px;border:1px solid #2a3a52;border-radius:6px"><figcaption style="font-size:.62rem;text-align:center;color:#8da0b8;margin-top:2px">antes</figcaption></figure>` +
+                `<figure style="margin:0"><img src="data:image/png;base64,${d.preview_depois_b64}" style="width:240px;border:1px solid #2a3a52;border-radius:6px"><figcaption style="font-size:.62rem;text-align:center;color:#8da0b8;margin-top:2px">depois (anonimizado)</figcaption></figure>`;
+            elU.appendChild(imgs);
+        }
+
+        if (d.resultado_dcm_b64) {
+            const link = document.createElement('a');
+            link.href = `data:application/dicom;base64,${d.resultado_dcm_b64}`;
+            link.download = `processado_${d.arquivo || 'resultado'}.dcm`;
+            link.textContent = '⬇ Baixar DICOM processado';
+            link.style.cssText = 'display:inline-block;margin-top:8px;color:#93c5fd;font-size:.72rem;text-decoration:none';
+            elU.appendChild(link);
+        }
 
         log(`Unary concluído em ${elapsed}ms`, 'u');
     } catch (e) {
@@ -605,41 +665,131 @@ async function callUnary() {
 }
 
 //Server Streaming
+async function callEnhance() {
+    const file = $('file-e').files[0];
+    if (!file) { log('Selecione um arquivo para o Realce.', 'err'); return; }
+
+    setLoading('btn-e', true);
+    setRes('e', 'Enviando requisição ao Server B…', 'live');
+    log(`Realce → "${file.name}" → Server B`, 'u');
+
+    const form = new FormData();
+    form.append('arquivo', file);
+    const t0 = Date.now();
+
+    try {
+        const params = new URLSearchParams({
+            preview: '1',
+            contraste: $('chk-contraste').checked ? '1' : '0',
+            brilho: $('chk-brilho').checked ? '1' : '0',
+            inverter: $('chk-inverter').checked ? '1' : '0',
+        });
+        const r = await fetch(BASE + '/api/enhance/processar-imagem?' + params, { method: 'POST', body: form });
+        if (!r.ok) throw new Error(await r.text());
+        const d = await r.json();
+        const elapsed = Date.now() - t0;
+
+        const elE = $('res-e');
+        elE.className = 'res success';
+        elE.innerHTML = '';
+        elE.style.maxHeight = 'none';
+        const infoE = document.createElement('div');
+        infoE.textContent = [
+            '✓ Realce concluído',
+            '',
+            `Servidor       : ${d.servidor}`,
+            `Tamanho entrada: ${d.tamanho_entrada_bytes} bytes`,
+            `Tamanho saída  : ${d.tamanho_saida_bytes} bytes`,
+            `Tempo HTTP     : ${elapsed} ms`,
+        ].join('\n');
+        elE.appendChild(infoE);
+
+        if (d.preview_antes_b64 && d.preview_depois_b64) {
+            const imgs = document.createElement('div');
+            imgs.style.cssText = 'display:flex;gap:10px;margin-top:8px;flex-wrap:wrap';
+            imgs.innerHTML =
+                `<figure style="margin:0"><img src="data:image/png;base64,${d.preview_antes_b64}" style="width:240px;border:1px solid #2a3a52;border-radius:6px"><figcaption style="font-size:.62rem;text-align:center;color:#8da0b8;margin-top:2px">antes</figcaption></figure>` +
+                `<figure style="margin:0"><img src="data:image/png;base64,${d.preview_depois_b64}" style="width:240px;border:1px solid #2a3a52;border-radius:6px"><figcaption style="font-size:.62rem;text-align:center;color:#8da0b8;margin-top:2px">depois (realce)</figcaption></figure>`;
+            elE.appendChild(imgs);
+        }
+        if (d.resultado_dcm_b64) {
+            const link = document.createElement('a');
+            link.href = `data:application/dicom;base64,${d.resultado_dcm_b64}`;
+            link.download = `realce_${d.arquivo || 'resultado'}.dcm`;
+            link.textContent = '⬇ Baixar DICOM processado';
+            link.style.cssText = 'display:inline-block;margin-top:8px;color:#93c5fd;font-size:.72rem;text-decoration:none';
+            elE.appendChild(link);
+        }
+
+        log(`Realce ✓ concluído em ${elapsed}ms`, 'u');
+    } catch (e) {
+        setRes('e', `✗ Erro: ${e.message}`, 'fail');
+        log(`Realce ✗ ${e.message}`, 'err');
+    } finally {
+        setLoading('btn-e', false);
+    }
+}
+
 async function callServerStream() {
     const file = $('file-s').files[0];
     if (!file) { log('Selecione um arquivo para Server Streaming.', 'err'); return; }
 
     setLoading('btn-s', true);
-    setRes('s', '', 'live');
-    log(`Server Stream -> "${file.name}" -> Server A`, 's');
+    const elS = $('res-s');
+    elS.className = 'res live';
+    elS.innerHTML = '';
+    elS.style.maxHeight = 'none';
+    const galeria = document.createElement('div');
+    galeria.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+    elS.appendChild(galeria);
+    log(`Server Stream → "${file.name}" → Server B`, 's');
 
     const form = new FormData();
     form.append('arquivo', file);
     const t0 = Date.now();
-    const lines = [];
+    let n = 0;
+
+    const renderSlice = (linha) => {
+        let obj;
+        try { obj = JSON.parse(linha); } catch { return; }
+        n++;
+        const fig = document.createElement('figure');
+        fig.style.cssText = 'margin:0;text-align:center';
+        fig.innerHTML = (obj.png_b64
+            ? `<img src="data:image/png;base64,${obj.png_b64}" style="width:220px;border:1px solid #1e3a2e;border-radius:6px">`
+            : `<div style="width:220px;font-size:.6rem;color:#8da0b8">${obj.bytes} bytes</div>`)
+            + `<figcaption style="font-size:.6rem;color:#6ee7b7;margin-top:2px">${obj.slice_id}</figcaption>`;
+        galeria.appendChild(fig);
+        log(`  ↳ ${obj.slice_id}`, 's');
+    };
 
     try {
-        const r = await fetch(BASE + '/api/server-stream/processar-etapas', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/server-stream/processar-etapas?preview=1', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
 
         const reader = r.body.getReader();
         const dec = new TextDecoder();
-
+        let buffer = '';
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const chunk = dec.decode(value, { stream: true });
-            chunk.split('\n').filter(l => l.trim()).forEach(l => {
-                lines.push(l);
-                appendRes('s', l + '\n');
-                log(`  -> ${l.trim()}`, 's');
-            });
+            buffer += dec.decode(value, { stream: true });
+            let idx;
+            while ((idx = buffer.indexOf('\n')) >= 0) {
+                const linha = buffer.slice(0, idx).trim();
+                buffer = buffer.slice(idx + 1);
+                if (linha) renderSlice(linha);
+            }
         }
+        if (buffer.trim()) renderSlice(buffer.trim());
 
         const elapsed = Date.now() - t0;
-        appendRes('s', `\nStream completo — ${lines.length} etapas em ${elapsed}ms`);
-        $('res-s').className = 'res success';
-        log(`Server Stream ${lines.length} etapas em ${elapsed}ms`, 's');
+        const rod = document.createElement('div');
+        rod.style.marginTop = '8px';
+        rod.textContent = `✓ Stream completo — ${n} fatias filtradas em ${elapsed}ms`;
+        elS.appendChild(rod);
+        elS.className = 'res success';
+        log(`Server Stream ✓ ${n} fatias em ${elapsed}ms`, 's');
     } catch (e) {
         setRes('s', `Erro: ${e.message}`, 'fail');
         log(`Server Stream Erro: ${e.message}`, 'err');
@@ -692,36 +842,61 @@ async function callBidi() {
     if (!files.length) { log('Selecione arquivos para Bidirecional.', 'err'); return; }
 
     setLoading('btn-b', true);
-    setRes('b', '', 'live');
-    log(`Bidirecional -> ${files.length} arquivo(s) -> Server B`, 'b');
+    const elB = $('res-b');
+    elB.className = 'res live';
+    elB.innerHTML = '';
+    elB.style.maxHeight = 'none';
+    const galeriaB = document.createElement('div');
+    galeriaB.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+    elB.appendChild(galeriaB);
+    log(`Bidirecional → ${files.length} arquivo(s) → Server B`, 'b');
 
     const form = new FormData();
     [...files].forEach(f => form.append('arquivos', f));
     const t0 = Date.now();
-    const lines = [];
+    let n = 0;
+
+    const renderEvento = (linha) => {
+        let obj;
+        try { obj = JSON.parse(linha); } catch { return; }
+        n++;
+        const fig = document.createElement('figure');
+        fig.style.cssText = 'margin:0;text-align:center';
+        fig.innerHTML = (obj.png_b64
+            ? `<img src="data:image/png;base64,${obj.png_b64}" style="width:220px;border:1px solid #3a1e3e;border-radius:6px">`
+            : `<div style="width:220px;font-size:.6rem;color:#8da0b8">${obj.stage || ''}</div>`)
+            + `<figcaption style="font-size:.6rem;color:#f9a8d4;margin-top:2px">${obj.slice_id}</figcaption>`;
+        galeriaB.appendChild(fig);
+        log(`  ↳ ${obj.slice_id}`, 'b');
+    };
 
     try {
-        const r = await fetch(BASE + '/api/bidirecional/preview-ao-vivo', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/bidirecional/preview-ao-vivo?preview=1', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
 
         const reader = r.body.getReader();
         const dec = new TextDecoder();
-
+        let buffer = '';
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const chunk = dec.decode(value, { stream: true });
-            chunk.split('\n').filter(l => l.trim()).forEach(l => {
-                lines.push(l);
-                appendRes('b', l + '\n');
-                log(`  -> ${l.trim()}`, 'b');
-            });
+            buffer += dec.decode(value, { stream: true });
+            let idx;
+            while ((idx = buffer.indexOf('\n')) >= 0) {
+                const linha = buffer.slice(0, idx).trim();
+                buffer = buffer.slice(idx + 1);
+                if (linha) renderEvento(linha);
+            }
         }
+        if (buffer.trim()) renderEvento(buffer.trim());
 
         const elapsed = Date.now() - t0;
-        appendRes('b', `\nStream bidirecional — ${lines.length} previews em ${elapsed}ms`);
-        $('res-b').className = 'res success';
-        log(`Bidirecional ${lines.length} previews em ${elapsed}ms`, 'b');
+        const rodB = document.createElement('div');
+        rodB.style.marginTop = '8px';
+        rodB.textContent = `✓ Stream bidirecional — ${n} fatias filtradas em ${elapsed}ms`;
+        elB.appendChild(rodB);
+        elB.className = 'res success';
+        log(`Bidirecional ✓ ${n} fatias em ${elapsed}ms`, 'b');
     } catch (e) {
         setRes('b', `Erro: ${e.message}`, 'fail');
         log(`Bidirecional Erro: ${e.message}`, 'err');

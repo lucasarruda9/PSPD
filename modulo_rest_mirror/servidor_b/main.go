@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/suyashkumar/dicom"
@@ -66,10 +68,10 @@ type ProgressEvent struct {
 	Index     int32   `json:"index"`
 	Stage     string  `json:"stage"`
 	ElapsedMs float64 `json:"elapsed_ms"`
+	DataB64   string  `json:"data_b64,omitempty"`
 }
 
-// percorre os pixels 16-bit aplicando contraste, brilho e/ou inversao. 
-// Mesma logica do gRPC Server B.
+
 func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarBrilho, aplicarInversao bool) ([]byte, error) {
 	dataset, err := dicom.Parse(bytes.NewReader(dadosOriginais), int64(len(dadosOriginais)), nil)
 	if err != nil {
@@ -121,7 +123,70 @@ func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarB
 	return bufferEscrita.Bytes(), nil
 }
 
-// unario: equivalente REST do Enhance.
+const MaxFatiasExame = 8 
+
+
+var indiceExames = map[string][]string{}
+
+
+func lerSeriesUID(dados []byte) string {
+	ds, err := dicom.Parse(bytes.NewReader(dados), int64(len(dados)), nil)
+	if err != nil {
+		return ""
+	}
+	el, err := ds.FindElementByTag(tag.Tag{Group: 0x0020, Element: 0x000E})
+	if err != nil {
+		return ""
+	}
+	if strs, ok := el.Value.GetValue().([]string); ok && len(strs) > 0 {
+		return strings.TrimSpace(strs[0])
+	}
+	return ""
+}
+
+
+func construirIndiceExames() {
+	indiceExames = map[string][]string{}
+	fatias := 0
+	_ = filepath.WalkDir(DiretorioArquivos, func(caminho string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		nome := strings.ToLower(d.Name())
+		if !strings.HasSuffix(nome, ".dcm") || strings.HasPrefix(nome, "fatia") || strings.HasPrefix(nome, "upload_") {
+			return nil
+		}
+		dados, err := os.ReadFile(caminho)
+		if err != nil {
+			return nil
+		}
+		if uid := lerSeriesUID(dados); uid != "" {
+			indiceExames[uid] = append(indiceExames[uid], caminho)
+			fatias++
+		}
+		return nil
+	})
+	for uid := range indiceExames {
+		sort.Strings(indiceExames[uid])
+	}
+	log.Printf("[Servidor B-REST] Indice: %d exame(s), %d fatia(s)", len(indiceExames), fatias)
+}
+
+
+func arquivosDoExame(examID string) []string {
+	arquivos := indiceExames[examID]
+	if len(arquivos) == 0 {
+		return []string{
+			filepath.Join(DiretorioArquivos, "fatia1.dcm"),
+			filepath.Join(DiretorioArquivos, "fatia2.dcm"),
+		}
+	}
+	if len(arquivos) > MaxFatiasExame {
+		arquivos = arquivos[:MaxFatiasExame]
+	}
+	return arquivos
+}
+
 func handleEnhance(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
@@ -155,8 +220,6 @@ func handleEnhance(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// os fluxos de streaming do gRPC (server e bidirecional) viram NDJSON no REST:
-// uma linha JSON por item, com flush a cada item enviado.
 func handleProcessExam(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
@@ -174,10 +237,7 @@ func handleProcessExam(w http.ResponseWriter, r *http.Request) {
 	flusher, _ := w.(http.Flusher)
 	enc := json.NewEncoder(w)
 
-	arquivosExame := []string{
-		fmt.Sprintf("%s/fatia1.dcm", DiretorioArquivos),
-		fmt.Sprintf("%s/fatia2.dcm", DiretorioArquivos),
-	}
+	arquivosExame := arquivosDoExame(req.ExamID)
 
 	for indice, caminhoArquivo := range arquivosExame {
 		bytesOriginais, err := os.ReadFile(caminhoArquivo)
@@ -202,7 +262,7 @@ func handleProcessExam(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// client streaming -> array de slices num unico corpo.
+
 func handleUploadExam(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
@@ -235,7 +295,7 @@ func handleUploadExam(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// bidirecional -> array na entrada, NDJSON (eventos de progresso) na saida.
+
 func handleLiveProcess(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "metodo nao permitido", http.StatusMethodNotAllowed)
@@ -258,7 +318,8 @@ func handleLiveProcess(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[Aviso B-REST] base64 invalido em %s, pulando", fatia.SliceID)
 			continue
 		}
-		if _, err := aplicarFiltrosImagemDicom(dados, true, true, false); err != nil {
+		bytesTratados, err := aplicarFiltrosImagemDicom(dados, true, true, false)
+		if err != nil {
 			log.Printf("[Servidor B-REST] Erro ao tratar fluxo ao vivo: %v", err)
 			continue
 		}
@@ -267,6 +328,7 @@ func handleLiveProcess(w http.ResponseWriter, r *http.Request) {
 			Index:     fatia.Index,
 			Stage:     "Filtros de Nitidez e Brilho Aplicados com Sucesso",
 			ElapsedMs: 0.0,
+			DataB64:   base64.StdEncoding.EncodeToString(bytesTratados),
 		})
 		if flusher != nil {
 			flusher.Flush()
@@ -286,12 +348,14 @@ func escreverJSON(w http.ResponseWriter, v any) {
 	}
 }
 
-// registra as rotas e sobe o servidor HTTP (porta padrao 9002).
+
 func main() {
 	porta := os.Getenv("PORT")
 	if porta == "" {
 		porta = PortaPadrao
 	}
+
+	construirIndiceExames()
 
 	http.HandleFunc("/enhance", handleEnhance)
 	http.HandleFunc("/process-exam", handleProcessExam)

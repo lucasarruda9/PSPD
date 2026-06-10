@@ -44,7 +44,7 @@ fi
 } > "$CORPO_UNICO"
 
 # Corpo multipart com varios arquivos (campo 'arquivos') -> client e bidi
-mapfile -t SLICES < <(find "$DATASET" -maxdepth 1 -name '*.dcm' 2>/dev/null | sort | head -n "$N_SLICES")
+mapfile -t SLICES < <(find "$DATASET" -name '*.dcm' 2>/dev/null | grep -vE '/(fatia|upload_)[^/]*$' | sort | head -n "$N_SLICES")
 if [ "${#SLICES[@]}" -lt 2 ]; then
     SLICES=("$AMOSTRA" "$AMOSTRA")   # fallback: repete a amostra
 fi
