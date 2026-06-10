@@ -71,10 +71,25 @@ def health_check():
 def _dicom_para_png_b64(dados: bytes):
     """Renderiza os pixels de um DICOM em PNG (base64) para preview; None se falhar."""
     try:
+        import numpy as np
         ds = pydicom.dcmread(io.BytesIO(dados), force=True)
         arr = ds.pixel_array.astype("float32")
-        arr -= arr.min()
-        topo = float(arr.max())
+        vmin, vmax = None, None
+        if 'WindowCenter' in ds and 'WindowWidth' in ds:
+            wc = ds.WindowCenter
+            ww = ds.WindowWidth
+            if isinstance(wc, pydicom.multival.MultiValue): wc = float(wc[0])
+            else: wc = float(wc)
+            if isinstance(ww, pydicom.multival.MultiValue): ww = float(ww[0])
+            else: ww = float(ww)
+            vmin = wc - ww / 2.0
+            vmax = wc + ww / 2.0
+        if vmin is None or vmax is None:
+            vmin = arr.min()
+            vmax = arr.max()
+        arr = np.clip(arr, vmin, vmax)
+        arr -= vmin
+        topo = float(vmax - vmin)
         if topo > 0:
             arr = arr / topo * 255.0
         imagem = Image.fromarray(arr.astype("uint8"))
