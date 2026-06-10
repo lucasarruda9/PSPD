@@ -2,13 +2,13 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import grpc.aio
 from pathlib import Path
 import asyncio
 import base64
 import io
 import json
-import time
 import os
 
 import pydicom
@@ -69,12 +69,30 @@ def health_check():
     return {"status": "ok", "grpc_server_a": GRPC_SERVER_A, "grpc_server_b": GRPC_SERVER_B}
 
 def _dicom_para_png_b64(dados: bytes):
-    """Renderiza os pixels de um DICOM em PNG (base64) para preview; None se falhar."""
     try:
+        import numpy as np
         ds = pydicom.dcmread(io.BytesIO(dados), force=True)
         arr = ds.pixel_array.astype("float32")
-        arr -= arr.min()
-        topo = float(arr.max())
+        vmin, vmax = None, None
+        if "WindowCenter" in ds and "WindowWidth" in ds:
+            wc = ds.WindowCenter
+            ww = ds.WindowWidth
+            if isinstance(wc, pydicom.multival.MultiValue):
+                wc = float(wc[0])
+            else:
+                wc = float(wc)
+            if isinstance(ww, pydicom.multival.MultiValue):
+                ww = float(ww[0])
+            else:
+                ww = float(ww)
+            vmin = wc - ww / 2.0
+            vmax = wc + ww / 2.0
+        if vmin is None or vmax is None:
+            vmin = float(arr.min())
+            vmax = float(arr.max())
+        arr = np.clip(arr, vmin, vmax)
+        arr -= vmin
+        topo = float(vmax - vmin)
         if topo > 0:
             arr = arr / topo * 255.0
         imagem = Image.fromarray(arr.astype("uint8"))
@@ -82,7 +100,7 @@ def _dicom_para_png_b64(dados: bytes):
         imagem.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception as e:
-        print(f"[preview] falha ao renderizar PNG: {e}")
+        print(f"[preview] {e}")
         return None
 
 
@@ -110,11 +128,10 @@ def _series_uid(dados: bytes) -> str:
 
 
 @app.post("/api/unary/processar-imagem")
-async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool = False):
+async def processar_imagem_unary(arquivo: UploadFile = File(...)):
     try:
         stub = get_anonymizer_stub()
         conteudo = await arquivo.read()
-        
         req = medimg_pb2.AnonymizeRequest(
             slice=medimg_pb2.Slice(
                 slice_id=arquivo.filename,
@@ -123,8 +140,7 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool 
             )
         )
         resp = await stub.Anonymize(req)
-        
-        resposta = {
+        return {
             "tipo": "unary",
             "servidor": "A (Anonymizer)",
             "arquivo": resp.slice.slice_id,
@@ -135,14 +151,10 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool 
                 "resolucao": f"{resp.metadata.rows}x{resp.metadata.columns}",
                 "tags_removidas": list(resp.metadata.removed_phi_tags)
             },
+            "phi_antes": _phi(conteudo),
+            "phi_depois": _phi(resp.slice.data),
+            "resultado_dcm_b64": base64.b64encode(resp.slice.data).decode("ascii"),
         }
-        if preview:
-            resposta["phi_antes"] = _phi(conteudo)
-            resposta["phi_depois"] = _phi(resp.slice.data)
-            resposta["preview_antes_b64"] = _dicom_para_png_b64(conteudo)
-            resposta["preview_depois_b64"] = _dicom_para_png_b64(resp.slice.data)
-            resposta["resultado_dcm_b64"] = base64.b64encode(resp.slice.data).decode("ascii")
-        return resposta
     except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
@@ -175,27 +187,24 @@ async def processar_enhance_unary(arquivo: UploadFile = File(...), preview: bool
     except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 
+class ExamRequestSchema(BaseModel):
+    exam_id: str
+
 @app.post("/api/server-stream/processar-etapas")
-async def processar_etapas_stream(arquivo: UploadFile = File(...), preview: bool = False):
+async def processar_etapas_stream(request: ExamRequestSchema):
     try:
         stub = get_pipeline_stub()
-        conteudo = await arquivo.read()
-        exam_id = _series_uid(conteudo) or arquivo.filename
-        req = medimg_pb2.ExamRequest(exam_id=exam_id)
-        
+        req = medimg_pb2.ExamRequest(exam_id=request.exam_id)
+
         async def gerar_respostas():
             async for resp in stub.ProcessExam(req):
-                if preview:
-                    yield json.dumps({
-                        "slice_id": resp.slice.slice_id,
-                        "bytes": len(resp.slice.data),
-                        "png_b64": _dicom_para_png_b64(resp.slice.data),
-                    }) + "\n"
-                else:
-                    yield f"Processado Slice [{resp.slice.slice_id}] - {len(resp.slice.data)} bytes\n"
+                yield json.dumps({
+                    "slice_id": resp.slice.slice_id,
+                    "bytes": len(resp.slice.data),
+                    "png_b64": _dicom_para_png_b64(resp.slice.data),
+                }) + "\n"
 
-        midia = "application/x-ndjson" if preview else "text/plain"
-        return StreamingResponse(gerar_respostas(), media_type=midia)
+        return StreamingResponse(gerar_respostas(), media_type="application/x-ndjson")
     except grpc.aio.AioRpcError as e:
         raise HTTPException(status_code=503, detail=f"Erro gRPC: {e.details()}")
 

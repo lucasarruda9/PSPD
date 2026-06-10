@@ -45,10 +45,29 @@ def b64(dados: bytes) -> str:
 
 def _dicom_para_png_b64(dados: bytes):
     try:
+        import numpy as np
         ds = pydicom.dcmread(io.BytesIO(dados), force=True)
         arr = ds.pixel_array.astype("float32")
-        arr -= arr.min()
-        topo = float(arr.max())
+        vmin, vmax = None, None
+        if "WindowCenter" in ds and "WindowWidth" in ds:
+            wc = ds.WindowCenter
+            ww = ds.WindowWidth
+            if isinstance(wc, pydicom.multival.MultiValue):
+                wc = float(wc[0])
+            else:
+                wc = float(wc)
+            if isinstance(ww, pydicom.multival.MultiValue):
+                ww = float(ww[0])
+            else:
+                ww = float(ww)
+            vmin = wc - ww / 2.0
+            vmax = wc + ww / 2.0
+        if vmin is None or vmax is None:
+            vmin = float(arr.min())
+            vmax = float(arr.max())
+        arr = np.clip(arr, vmin, vmax)
+        arr -= vmin
+        topo = float(vmax - vmin)
         if topo > 0:
             arr = arr / topo * 255.0
         imagem = Image.fromarray(arr.astype("uint8"))
@@ -56,7 +75,7 @@ def _dicom_para_png_b64(dados: bytes):
         imagem.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception as e:
-        print(f"[preview] falha ao renderizar PNG: {e}")
+        print(f"[preview] {e}")
         return None
 
 
@@ -83,7 +102,7 @@ def health_check():
     return {"status": "ok", "rest_server_a": REST_SERVER_A, "rest_server_b": REST_SERVER_B}
 
 @app.post("/api/unary/processar-imagem")
-async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool = False):
+async def processar_imagem_unary(arquivo: UploadFile = File(...)):
     conteudo = await arquivo.read()
     payload = {"slice_id": arquivo.filename, "index": 1, "data_b64": b64(conteudo)}
     try:
@@ -95,7 +114,7 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool 
     dados = resp.json()
     saida = base64.b64decode(dados["data_b64"])
     meta = dados["metadata"]
-    resposta = {
+    return {
         "tipo": "unary",
         "servidor": "A' (Anonymizer REST)",
         "arquivo": dados["slice_id"],
@@ -106,14 +125,10 @@ async def processar_imagem_unary(arquivo: UploadFile = File(...), preview: bool 
             "resolucao": f'{meta["rows"]}x{meta["columns"]}',
             "tags_removidas": meta["removed_phi_tags"],
         },
+        "phi_antes": _phi(conteudo),
+        "phi_depois": _phi(saida),
+        "resultado_dcm_b64": dados["data_b64"],
     }
-    if preview:
-        resposta["phi_antes"] = _phi(conteudo)
-        resposta["phi_depois"] = _phi(saida)
-        resposta["preview_antes_b64"] = _dicom_para_png_b64(conteudo)
-        resposta["preview_depois_b64"] = _dicom_para_png_b64(saida)
-        resposta["resultado_dcm_b64"] = dados["data_b64"]
-    return resposta
 
 
 def _series_uid(dados: bytes) -> str:
@@ -124,10 +139,14 @@ def _series_uid(dados: bytes) -> str:
         return ""
 
 
+from pydantic import BaseModel
+
+class ExamRequestSchema(BaseModel):
+    exam_id: str
+
 @app.post("/api/server-stream/processar-etapas")
-async def processar_etapas_stream(arquivo: UploadFile = File(...), preview: bool = False):
-    conteudo = await arquivo.read()
-    payload = {"exam_id": _series_uid(conteudo) or arquivo.filename}
+async def processar_etapas_stream(request: ExamRequestSchema):
+    payload = {"exam_id": request.exam_id}
 
     async def gerar_respostas():
         async with cliente.stream("POST", f"{REST_SERVER_B}/process-exam", json=payload, timeout=None) as resp:
@@ -136,17 +155,13 @@ async def processar_etapas_stream(arquivo: UploadFile = File(...), preview: bool
                     continue
                 obj = json.loads(linha)
                 dados_slice = base64.b64decode(obj["data_b64"])
-                if preview:
-                    yield json.dumps({
-                        "slice_id": obj["slice_id"],
-                        "bytes": len(dados_slice),
-                        "png_b64": _dicom_para_png_b64(dados_slice),
-                    }) + "\n"
-                else:
-                    yield f"Processado Slice [{obj['slice_id']}] - {len(dados_slice)} bytes\n"
+                yield json.dumps({
+                    "slice_id": obj["slice_id"],
+                    "bytes": len(dados_slice),
+                    "png_b64": _dicom_para_png_b64(dados_slice),
+                }) + "\n"
 
-    midia = "application/x-ndjson" if preview else "text/plain"
-    return StreamingResponse(gerar_respostas(), media_type=midia)
+    return StreamingResponse(gerar_respostas(), media_type="application/x-ndjson")
 
 
 @app.post("/api/enhance/processar-imagem")
