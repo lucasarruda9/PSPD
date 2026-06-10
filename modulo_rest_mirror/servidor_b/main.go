@@ -73,45 +73,53 @@ type ProgressEvent struct {
 
 
 func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarBrilho, aplicarInversao bool) ([]byte, error) {
-	dataset, err := dicom.Parse(bytes.NewReader(dadosOriginais), int64(len(dadosOriginais)), nil)
+	dataset, err := dicom.Parse(bytes.NewReader(dadosOriginais), int64(len(dadosOriginais)), nil, dicom.SkipProcessingPixelDataValue())
 	if err != nil {
 		return nil, fmt.Errorf("falha ao interpretar os bytes do DICOM: %v", err)
 	}
 
 	elementoPixel, err := dataset.FindElementByTag(tag.PixelData)
 	if err != nil {
-		var bufferEscrita bytes.Buffer
-		if err := dicom.Write(&bufferEscrita, dataset); err != nil {
-			return nil, err
-		}
-		return bufferEscrita.Bytes(), nil
-	}
-
-	informacaoPixel := dicom.MustGetPixelDataInfo(elementoPixel.Value)
-	if informacaoPixel.IntentionallySkipped || len(informacaoPixel.UnprocessedValueData) == 0 {
+	//Se o arquivo tiver PixelData então não há imagem para filtrar retorna os dadosOriginais diretamente para 
+	//economizar processamento e evitar que o dicom.Write corrompa metadados obscuros ao reescrever o arquivo
 		return dadosOriginais, nil
 	}
-	bytesBrutosPixel := informacaoPixel.UnprocessedValueData
 
-	for i := 0; i < len(bytesBrutosPixel)-1; i += 2 {
-		valorPixel := int(uint16(bytesBrutosPixel[i]) | uint16(bytesBrutosPixel[i+1])<<8)
+    informacaoPixel := dicom.MustGetPixelDataInfo(elementoPixel.Value)
+    if informacaoPixel.IntentionallySkipped || len(informacaoPixel.UnprocessedValueData) == 0 {
+        return dadosOriginais, nil
+    }
+    bytesBrutosPixel := informacaoPixel.UnprocessedValueData
+    maxPixel := 0
+    minPixel := 65535
+    for i := 0; i < len(bytesBrutosPixel)-1; i += 2 {
+        valorPixel := int(uint16(bytesBrutosPixel[i]) | uint16(bytesBrutosPixel[i+1])<<8)
+        if valorPixel > maxPixel { maxPixel = valorPixel }
+        if valorPixel < minPixel { minPixel = valorPixel }
+    }
+    incrementoDeBrilho := (maxPixel - minPixel) / 4
+    centroContraste := minPixel + (maxPixel - minPixel) / 2
+    fatorEscalaContraste := 2
 
-		if aplicarContraste {
-			valorPixel = CentroContraste16Bit + (valorPixel-CentroContraste16Bit)*FatorEscalaContraste
-		}
-		if aplicarBrilho {
-			valorPixel = valorPixel + IncrementoDeBrilho
-		}
-		if aplicarInversao {
-			valorPixel = ValorMaximoPixel16Bit - valorPixel
-		}
+    for i := 0; i < len(bytesBrutosPixel)-1; i += 2 {
+        valorPixel := int(uint16(bytesBrutosPixel[i]) | uint16(bytesBrutosPixel[i+1])<<8)
 
-		if valorPixel > ValorMaximoPixel16Bit {
-			valorPixel = ValorMaximoPixel16Bit
-		}
-		if valorPixel < ValorMinimoPixel {
-			valorPixel = ValorMinimoPixel
-		}
+        if aplicarContraste {
+            valorPixel = centroContraste + (valorPixel-centroContraste)*fatorEscalaContraste
+        }
+        if aplicarBrilho {
+            valorPixel = valorPixel + incrementoDeBrilho
+        }
+        if aplicarInversao {
+            valorPixel = minPixel + (maxPixel - valorPixel)
+        }
+
+        if valorPixel > ValorMaximoPixel16Bit {
+            valorPixel = ValorMaximoPixel16Bit
+        }
+        if valorPixel < ValorMinimoPixel {
+            valorPixel = ValorMinimoPixel
+        }
 		bytesBrutosPixel[i] = byte(valorPixel & 0xFF)
 		bytesBrutosPixel[i+1] = byte((valorPixel >> 8) & 0xFF)
 	}
