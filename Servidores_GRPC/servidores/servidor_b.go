@@ -10,9 +10,8 @@ import (
     "net"
     "os"
     "path/filepath"
-    "sort"
-    "strings"
 
+    "github.com/google/uuid"
     "github.com/suyashkumar/dicom"
     "github.com/suyashkumar/dicom/pkg/tag"
     "google.golang.org/grpc"
@@ -35,38 +34,43 @@ type serverB struct {
 }
 
 func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarBrilho, aplicarInversao bool) ([]byte, error) {
-    dataset, err := dicom.Parse(bytes.NewReader(dadosOriginais), int64(len(dadosOriginais)), nil)
+    dataset, err := dicom.Parse(bytes.NewReader(dadosOriginais), int64(len(dadosOriginais)), nil, dicom.SkipProcessingPixelDataValue())
     if err != nil {
         return nil, fmt.Errorf("falha ao interpretar os bytes do DICOM: %v", err)
     }
 
     elementoPixel, err := dataset.FindElementByTag(tag.PixelData)
     if err != nil {
-        var bufferEscrita bytes.Buffer
-        if err := dicom.Write(&bufferEscrita, dataset); err != nil {
-            return nil, err
-        }
-        return bufferEscrita.Bytes(), nil
+        return dadosOriginais, nil
     }
 
     informacaoPixel := dicom.MustGetPixelDataInfo(elementoPixel.Value)
-
     if informacaoPixel.IntentionallySkipped || len(informacaoPixel.UnprocessedValueData) == 0 {
         return dadosOriginais, nil
     }
     bytesBrutosPixel := informacaoPixel.UnprocessedValueData
+    maxPixel := 0
+    minPixel := 65535
+    for i := 0; i < len(bytesBrutosPixel)-1; i += 2 {
+        valorPixel := int(uint16(bytesBrutosPixel[i]) | uint16(bytesBrutosPixel[i+1])<<8)
+        if valorPixel > maxPixel { maxPixel = valorPixel }
+        if valorPixel < minPixel { minPixel = valorPixel }
+    }
+    incrementoDeBrilho := (maxPixel - minPixel) / 4
+    centroContraste := minPixel + (maxPixel-minPixel)/2
+    fatorEscalaContraste := 2
 
     for i := 0; i < len(bytesBrutosPixel)-1; i += 2 {
         valorPixel := int(uint16(bytesBrutosPixel[i]) | uint16(bytesBrutosPixel[i+1])<<8)
 
         if aplicarContraste {
-            valorPixel = CentroContraste16Bit + (valorPixel-CentroContraste16Bit)*FatorEscalaContraste
+            valorPixel = centroContraste + (valorPixel-centroContraste)*fatorEscalaContraste
         }
         if aplicarBrilho {
-            valorPixel = valorPixel + IncrementoDeBrilho
+            valorPixel = valorPixel + incrementoDeBrilho
         }
         if aplicarInversao {
-            valorPixel = ValorMaximoPixel16Bit - valorPixel
+            valorPixel = minPixel + (maxPixel - valorPixel)
         }
 
         if valorPixel > ValorMaximoPixel16Bit {
@@ -74,10 +78,10 @@ func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarB
         }
         if valorPixel < ValorMinimoPixel {
             valorPixel = ValorMinimoPixel
-        } 
-		bytesBrutosPixel[i] = byte(valorPixel & 0xFF)
-		bytesBrutosPixel[i+1] = byte((valorPixel >> 8) & 0xFF)
-	}
+        }
+        bytesBrutosPixel[i] = byte(valorPixel & 0xFF)
+        bytesBrutosPixel[i+1] = byte((valorPixel >> 8) & 0xFF)
+    }
 
     var bufferEscrita bytes.Buffer
     if err := dicom.Write(&bufferEscrita, dataset); err != nil {
@@ -85,66 +89,6 @@ func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarB
     }
 
     return bufferEscrita.Bytes(), nil
-}
-
-const MaxFatiasExame = 8 
-
-var indiceExames = map[string][]string{}
-
-func lerSeriesUID(dados []byte) string {
-	ds, err := dicom.Parse(bytes.NewReader(dados), int64(len(dados)), nil)
-	if err != nil {
-		return ""
-	}
-	el, err := ds.FindElementByTag(tag.Tag{Group: 0x0020, Element: 0x000E})
-	if err != nil {
-		return ""
-	}
-	if strs, ok := el.Value.GetValue().([]string); ok && len(strs) > 0 {
-		return strings.TrimSpace(strs[0])
-	}
-	return ""
-}
-
-func construirIndiceExames() {
-	indiceExames = map[string][]string{}
-	fatias := 0
-	_ = filepath.WalkDir(DiretorioArquivos, func(caminho string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		nome := strings.ToLower(d.Name())
-		if !strings.HasSuffix(nome, ".dcm") || strings.HasPrefix(nome, "fatia") || strings.HasPrefix(nome, "upload_") {
-			return nil
-		}
-		dados, err := os.ReadFile(caminho)
-		if err != nil {
-			return nil
-		}
-		if uid := lerSeriesUID(dados); uid != "" {
-			indiceExames[uid] = append(indiceExames[uid], caminho)
-			fatias++
-		}
-		return nil
-	})
-	for uid := range indiceExames {
-		sort.Strings(indiceExames[uid])
-	}
-	log.Printf("[Servidor B] Indice: %d exame(s), %d fatia(s)", len(indiceExames), fatias)
-}
-
-func arquivosDoExame(examID string) []string {
-	arquivos := indiceExames[examID]
-	if len(arquivos) == 0 {
-		return []string{
-			filepath.Join(DiretorioArquivos, "fatia1.dcm"),
-			filepath.Join(DiretorioArquivos, "fatia2.dcm"),
-		}
-	}
-	if len(arquivos) > MaxFatiasExame {
-		arquivos = arquivos[:MaxFatiasExame]
-	}
-	return arquivos
 }
 
 // unário
@@ -172,19 +116,25 @@ func (s *serverB) Enhance(ctx context.Context, requisicao *pb.EnhanceRequest) (*
 
 // streaming de servidor
 func (s *serverB) ProcessExam(requisicao *pb.ExamRequest, stream pb.Pipeline_ProcessExamServer) error {
-    log.Printf("[Servidor B] Buscando lote de arquivos para o Exame ID: %s", requisicao.ExamId)
+    log.Printf("[Servidor B] Processando Exame ID: %s", requisicao.ExamId)
 
-    // lê 
-    arquivosExame := arquivosDoExame(requisicao.ExamId)
+    caminhoPasta := filepath.Join(DiretorioArquivos, requisicao.ExamId)
+    arquivos, err := os.ReadDir(caminhoPasta)
+    if err != nil {
+        return fmt.Errorf("exame nao encontrado: %s", requisicao.ExamId)
+    }
 
-    for indice, caminhoArquivo := range arquivosExame {
+    for indice, entrada := range arquivos {
+        if entrada.IsDir() {
+            continue
+        }
+        caminhoArquivo := filepath.Join(caminhoPasta, entrada.Name())
         bytesOriginais, err := ioutil.ReadFile(caminhoArquivo)
         if err != nil {
-            log.Printf("[Aviso B] Arquivo ausente na pasta local, pulando: %s", caminhoArquivo)
+            log.Printf("[Aviso B] Arquivo ausente, pulando: %s", caminhoArquivo)
             continue
         }
 
-        // Aplica um filtro automático padrão de contraste para o lote enviado em fluxo
         bytesFiltrados, err := aplicarFiltrosImagemDicom(bytesOriginais, true, false, false)
         if err != nil {
             return err
@@ -192,7 +142,7 @@ func (s *serverB) ProcessExam(requisicao *pb.ExamRequest, stream pb.Pipeline_Pro
 
         respostaStreaming := &pb.EnhanceResponse{
             Slice: &pb.Slice{
-                SliceId: fmt.Sprintf("Fatia_Processada_%d", indice+1),
+                SliceId: entrada.Name(),
                 Index:   int32(indice + 1),
                 Data:    bytesFiltrados,
             },
@@ -209,15 +159,18 @@ func (s *serverB) ProcessExam(requisicao *pb.ExamRequest, stream pb.Pipeline_Pro
 
 // streaming de cliente
 func (s *serverB) UploadExam(stream pb.Pipeline_UploadExamServer) error {
-    quantidadeFatiasRecebidas := 0
+    idExame := uuid.New().String()
+    caminhoPasta := filepath.Join(DiretorioArquivos, idExame)
+    _ = os.MkdirAll(caminhoPasta, 0755)
 
+    recebidas := 0
 	for {
         fatiaRecebida, err := stream.Recv()
         if err == io.EOF {
             resumoFinal := &pb.ExamSummary{
-                ExamId:      "Upload_Hospitalar_Registrado",
-                TotalSlices: int32(quantidadeFatiasRecebidas),
-                SlicesOk:    int32(quantidadeFatiasRecebidas),
+                ExamId:      idExame,
+                TotalSlices: int32(recebidas),
+                SlicesOk:    int32(recebidas),
                 TotalMs:     0.0,
             }
             return stream.SendAndClose(resumoFinal)
@@ -225,11 +178,13 @@ func (s *serverB) UploadExam(stream pb.Pipeline_UploadExamServer) error {
         if err != nil {
             return err
         }
-        baseName := strings.TrimSuffix(fatiaRecebida.SliceId, ".dcm")
-        nomeDestinoArquivo := fmt.Sprintf("%s/upload_fatia_%s.dcm", DiretorioArquivos, baseName)
-        _ = ioutil.WriteFile(nomeDestinoArquivo, fatiaRecebida.Data, 0644)
-
-        quantidadeFatiasRecebidas++
+        nomeArquivo := fmt.Sprintf("fatia_%d.dcm", fatiaRecebida.Index)
+        if fatiaRecebida.SliceId != "" {
+            nomeArquivo = fmt.Sprintf("%s.dcm", fatiaRecebida.SliceId)
+        }
+        destino := filepath.Join(caminhoPasta, nomeArquivo)
+        _ = ioutil.WriteFile(destino, fatiaRecebida.Data, 0644)
+        recebidas++
     }
 }
 
@@ -270,8 +225,6 @@ func main() {
     if err != nil {
         log.Fatalf("Falha ao escutar a porta %s: %v", PortaServidorB, err)
     }
-
-    construirIndiceExames()
 
     servidorGrpc := grpc.NewServer()
     instanciaServidorB := &serverB{}

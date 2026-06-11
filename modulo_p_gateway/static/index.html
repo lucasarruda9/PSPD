@@ -420,12 +420,14 @@
                 <div class="cbadge b">Server B</div>
             </div>
             <div class="card-body">
-                <div class="zone" id="zone-s">
-                    <input type="file" id="file-s" accept=".dcm">
-                    <div class="zone-ico">📁</div>
-                    <div class="zone-txt">Clique ou arraste uma imagem</div>
-                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
-                    <div class="zone-sel" id="sel-s"></div>
+                <div style="margin-bottom:.85rem">
+                    <label style="font-size:.74rem;color:var(--text-dim);display:block;margin-bottom:.35rem">Exam ID (obtido no Client Streaming)</label>
+                    <input id="input-exam-id" type="text" placeholder="Cole o UUID retornado pelo upload..."
+                        style="width:100%;padding:.45rem .7rem;border-radius:var(--r);border:1px solid var(--border);
+                        background:var(--bg2);color:var(--text);font-family:'JetBrains Mono',monospace;
+                        font-size:.72rem;outline:none;transition:border-color .2s"
+                        onfocus="this.style.borderColor='var(--border-hi)'"
+                        onblur="this.style.borderColor='var(--border)'">
                 </div>
                 <button class="btn btn-s" id="btn-s" onclick="callServerStream()">
                     <div class="spin"></div><span class="lbl">&gt; Executar Server Stream</span>
@@ -547,7 +549,7 @@ function appendRes(id, text) {
 }
 
 //Gerenciar seleção de arquivos e drag & drop
-['u','s','c','b','e'].forEach(k => {
+['u','c','b','e'].forEach(k => {
     const inp = $(`file-${k}`);
     const sel = $(`sel-${k}`);
     inp.addEventListener('change', () => {
@@ -557,7 +559,6 @@ function appendRes(id, text) {
             : `${files.length} arquivos selecionados`;
     });
 
-    //Suportar arrastar e soltar
     const zone = $(`zone-${k}`);
     zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('over'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('over'));
@@ -605,7 +606,7 @@ async function callUnary() {
     const t0 = Date.now();
 
     try {
-        const r = await fetch(BASE + '/api/unary/processar-imagem?preview=1', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/unary/processar-imagem', { method: 'POST', body: form });
         if (!r.ok) throw new Error(await r.text());
         const d = await r.json();
         const elapsed = Date.now() - t0;
@@ -616,12 +617,12 @@ async function callUnary() {
         elU.style.maxHeight = 'none';
         const infoU = document.createElement('div');
         infoU.textContent = [
-            '✓ Processamento concluído',
+            'Processamento concluido',
             '',
             `Servidor       : ${d.servidor}`,
-            `Resolução      : ${d.metadados?.resolucao}`,
+            `Resolucao      : ${d.metadados?.resolucao}`,
             `Tamanho entrada: ${d.tamanho_entrada_bytes} bytes`,
-            `Tamanho saída  : ${d.tamanho_saida_bytes} bytes`,
+            `Tamanho saida  : ${d.tamanho_saida_bytes} bytes`,
             `Tags removidas : ${(d.metadados?.tags_removidas || []).length}`,
             `Tempo HTTP     : ${elapsed} ms`,
         ].join('\n');
@@ -630,32 +631,23 @@ async function callUnary() {
         if (d.phi_antes && d.phi_depois) {
             const phi = document.createElement('div');
             phi.style.cssText = 'margin-top:8px;font-size:.7rem;line-height:1.7';
-            phi.innerHTML = '<div style="color:#8da0b8">Dados do paciente (anonimização):</div>' +
-                `<div>Nome  : <span style="color:#fca5a5">${d.phi_antes.PatientName || '—'}</span> → <span style="color:#6ee7b7">${d.phi_depois.PatientName || '—'}</span></div>` +
-                `<div>ID    : <span style="color:#fca5a5">${d.phi_antes.PatientID || '—'}</span> → <span style="color:#6ee7b7">${d.phi_depois.PatientID || '—'}</span></div>` +
-                `<div>Nasc. : <span style="color:#fca5a5">${d.phi_antes.PatientBirthDate || '—'}</span> → <span style="color:#6ee7b7">${d.phi_depois.PatientBirthDate || '—'}</span></div>`;
+            phi.innerHTML = '<div style="color:#8da0b8">Dados do paciente (anonimizacao):</div>' +
+                `<div>Nome  : <span style="color:#fca5a5">${d.phi_antes.PatientName || '-'}</span> &rarr; <span style="color:#6ee7b7">${d.phi_depois.PatientName || '-'}</span></div>` +
+                `<div>ID    : <span style="color:#fca5a5">${d.phi_antes.PatientID || '-'}</span> &rarr; <span style="color:#6ee7b7">${d.phi_depois.PatientID || '-'}</span></div>` +
+                `<div>Nasc. : <span style="color:#fca5a5">${d.phi_antes.PatientBirthDate || '-'}</span> &rarr; <span style="color:#6ee7b7">${d.phi_depois.PatientBirthDate || '-'}</span></div>`;
             elU.appendChild(phi);
-        }
-
-        if (d.preview_antes_b64 && d.preview_depois_b64) {
-            const imgs = document.createElement('div');
-            imgs.style.cssText = 'display:flex;gap:10px;margin-top:8px;flex-wrap:wrap';
-            imgs.innerHTML =
-                `<figure style="margin:0"><img src="data:image/png;base64,${d.preview_antes_b64}" style="width:240px;border:1px solid #2a3a52;border-radius:6px"><figcaption style="font-size:.62rem;text-align:center;color:#8da0b8;margin-top:2px">antes</figcaption></figure>` +
-                `<figure style="margin:0"><img src="data:image/png;base64,${d.preview_depois_b64}" style="width:240px;border:1px solid #2a3a52;border-radius:6px"><figcaption style="font-size:.62rem;text-align:center;color:#8da0b8;margin-top:2px">depois (anonimizado)</figcaption></figure>`;
-            elU.appendChild(imgs);
         }
 
         if (d.resultado_dcm_b64) {
             const link = document.createElement('a');
             link.href = `data:application/dicom;base64,${d.resultado_dcm_b64}`;
-            link.download = `processado_${d.arquivo || 'resultado'}.dcm`;
-            link.textContent = '⬇ Baixar DICOM processado';
+            link.download = `anonimizado_${d.arquivo || 'resultado'}.dcm`;
+            link.textContent = 'Baixar DICOM anonimizado';
             link.style.cssText = 'display:inline-block;margin-top:8px;color:#93c5fd;font-size:.72rem;text-decoration:none';
             elU.appendChild(link);
         }
 
-        log(`Unary concluído em ${elapsed}ms`, 'u');
+        log(`Unary concluido em ${elapsed}ms`, 'u');
     } catch (e) {
         setRes('u', `Erro: ${e.message}`, 'fail');
         log(`Unary Erro: ${e.message}`, 'err');
@@ -731,8 +723,8 @@ async function callEnhance() {
 }
 
 async function callServerStream() {
-    const file = $('file-s').files[0];
-    if (!file) { log('Selecione um arquivo para Server Streaming.', 'err'); return; }
+    const examId = $('input-exam-id').value.trim();
+    if (!examId) { log('Digite o Exam ID para o Server Streaming.', 'err'); return; }
 
     setLoading('btn-s', true);
     const elS = $('res-s');
@@ -742,10 +734,8 @@ async function callServerStream() {
     const galeria = document.createElement('div');
     galeria.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
     elS.appendChild(galeria);
-    log(`Server Stream → "${file.name}" → Server B`, 's');
+    log(`Server Stream -> ExamID: "${examId}" -> Server B`, 's');
 
-    const form = new FormData();
-    form.append('arquivo', file);
     const t0 = Date.now();
     let n = 0;
 
@@ -760,11 +750,15 @@ async function callServerStream() {
             : `<div style="width:220px;font-size:.6rem;color:#8da0b8">${obj.bytes} bytes</div>`)
             + `<figcaption style="font-size:.6rem;color:#6ee7b7;margin-top:2px">${obj.slice_id}</figcaption>`;
         galeria.appendChild(fig);
-        log(`  ↳ ${obj.slice_id}`, 's');
+        log(`  -> ${obj.slice_id}`, 's');
     };
 
     try {
-        const r = await fetch(BASE + '/api/server-stream/processar-etapas?preview=1', { method: 'POST', body: form });
+        const r = await fetch(BASE + '/api/server-stream/processar-etapas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ exam_id: examId }),
+        });
         if (!r.ok) throw new Error(await r.text());
 
         const reader = r.body.getReader();
@@ -786,10 +780,10 @@ async function callServerStream() {
         const elapsed = Date.now() - t0;
         const rod = document.createElement('div');
         rod.style.marginTop = '8px';
-        rod.textContent = `✓ Stream completo — ${n} fatias filtradas em ${elapsed}ms`;
+        rod.textContent = `Stream completo: ${n} fatias em ${elapsed}ms`;
         elS.appendChild(rod);
         elS.className = 'res success';
-        log(`Server Stream ✓ ${n} fatias em ${elapsed}ms`, 's');
+        log(`Server Stream: ${n} fatias em ${elapsed}ms`, 's');
     } catch (e) {
         setRes('s', `Erro: ${e.message}`, 'fail');
         log(`Server Stream Erro: ${e.message}`, 'err');

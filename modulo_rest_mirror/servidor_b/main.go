@@ -9,9 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 
+	"github.com/google/uuid"
 	"github.com/suyashkumar/dicom"
 	"github.com/suyashkumar/dicom/pkg/tag"
 )
@@ -73,18 +72,14 @@ type ProgressEvent struct {
 
 
 func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarBrilho, aplicarInversao bool) ([]byte, error) {
-	dataset, err := dicom.Parse(bytes.NewReader(dadosOriginais), int64(len(dadosOriginais)), nil)
+	dataset, err := dicom.Parse(bytes.NewReader(dadosOriginais), int64(len(dadosOriginais)), nil, dicom.SkipProcessingPixelDataValue())
 	if err != nil {
 		return nil, fmt.Errorf("falha ao interpretar os bytes do DICOM: %v", err)
 	}
 
 	elementoPixel, err := dataset.FindElementByTag(tag.PixelData)
 	if err != nil {
-		var bufferEscrita bytes.Buffer
-		if err := dicom.Write(&bufferEscrita, dataset); err != nil {
-			return nil, err
-		}
-		return bufferEscrita.Bytes(), nil
+		return dadosOriginais, nil
 	}
 
 	informacaoPixel := dicom.MustGetPixelDataInfo(elementoPixel.Value)
@@ -92,18 +87,28 @@ func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarB
 		return dadosOriginais, nil
 	}
 	bytesBrutosPixel := informacaoPixel.UnprocessedValueData
+	maxPixel := 0
+	minPixel := 65535
+	for i := 0; i < len(bytesBrutosPixel)-1; i += 2 {
+		valorPixel := int(uint16(bytesBrutosPixel[i]) | uint16(bytesBrutosPixel[i+1])<<8)
+		if valorPixel > maxPixel { maxPixel = valorPixel }
+		if valorPixel < minPixel { minPixel = valorPixel }
+	}
+	incrementoDeBrilho := (maxPixel - minPixel) / 4
+	centroContraste := minPixel + (maxPixel-minPixel)/2
+	fatorEscalaContraste := 2
 
 	for i := 0; i < len(bytesBrutosPixel)-1; i += 2 {
 		valorPixel := int(uint16(bytesBrutosPixel[i]) | uint16(bytesBrutosPixel[i+1])<<8)
 
 		if aplicarContraste {
-			valorPixel = CentroContraste16Bit + (valorPixel-CentroContraste16Bit)*FatorEscalaContraste
+			valorPixel = centroContraste + (valorPixel-centroContraste)*fatorEscalaContraste
 		}
 		if aplicarBrilho {
-			valorPixel = valorPixel + IncrementoDeBrilho
+			valorPixel = valorPixel + incrementoDeBrilho
 		}
 		if aplicarInversao {
-			valorPixel = ValorMaximoPixel16Bit - valorPixel
+			valorPixel = minPixel + (maxPixel - valorPixel)
 		}
 
 		if valorPixel > ValorMaximoPixel16Bit {
@@ -121,70 +126,6 @@ func aplicarFiltrosImagemDicom(dadosOriginais []byte, aplicarContraste, aplicarB
 		return nil, fmt.Errorf("erro ao serializar o dataset DICOM modificado: %v", err)
 	}
 	return bufferEscrita.Bytes(), nil
-}
-
-const MaxFatiasExame = 8 
-
-
-var indiceExames = map[string][]string{}
-
-
-func lerSeriesUID(dados []byte) string {
-	ds, err := dicom.Parse(bytes.NewReader(dados), int64(len(dados)), nil)
-	if err != nil {
-		return ""
-	}
-	el, err := ds.FindElementByTag(tag.Tag{Group: 0x0020, Element: 0x000E})
-	if err != nil {
-		return ""
-	}
-	if strs, ok := el.Value.GetValue().([]string); ok && len(strs) > 0 {
-		return strings.TrimSpace(strs[0])
-	}
-	return ""
-}
-
-
-func construirIndiceExames() {
-	indiceExames = map[string][]string{}
-	fatias := 0
-	_ = filepath.WalkDir(DiretorioArquivos, func(caminho string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		nome := strings.ToLower(d.Name())
-		if !strings.HasSuffix(nome, ".dcm") || strings.HasPrefix(nome, "fatia") || strings.HasPrefix(nome, "upload_") {
-			return nil
-		}
-		dados, err := os.ReadFile(caminho)
-		if err != nil {
-			return nil
-		}
-		if uid := lerSeriesUID(dados); uid != "" {
-			indiceExames[uid] = append(indiceExames[uid], caminho)
-			fatias++
-		}
-		return nil
-	})
-	for uid := range indiceExames {
-		sort.Strings(indiceExames[uid])
-	}
-	log.Printf("[Servidor B-REST] Indice: %d exame(s), %d fatia(s)", len(indiceExames), fatias)
-}
-
-
-func arquivosDoExame(examID string) []string {
-	arquivos := indiceExames[examID]
-	if len(arquivos) == 0 {
-		return []string{
-			filepath.Join(DiretorioArquivos, "fatia1.dcm"),
-			filepath.Join(DiretorioArquivos, "fatia2.dcm"),
-		}
-	}
-	if len(arquivos) > MaxFatiasExame {
-		arquivos = arquivos[:MaxFatiasExame]
-	}
-	return arquivos
 }
 
 func handleEnhance(w http.ResponseWriter, r *http.Request) {
@@ -231,27 +172,34 @@ func handleProcessExam(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "json invalido: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	log.Printf("[Servidor B-REST] Buscando lote do Exame ID: %s", req.ExamID)
+	log.Printf("[Servidor B-REST] Processando Exame ID: %s", req.ExamID)
+
+	caminhoPasta := filepath.Join(DiretorioArquivos, req.ExamID)
+	arquivos, err := os.ReadDir(caminhoPasta)
+	if err != nil {
+		http.Error(w, "exame nao encontrado", http.StatusNotFound)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	flusher, _ := w.(http.Flusher)
 	enc := json.NewEncoder(w)
 
-	arquivosExame := arquivosDoExame(req.ExamID)
-
-	for indice, caminhoArquivo := range arquivosExame {
-		bytesOriginais, err := os.ReadFile(caminhoArquivo)
+	for indice, arquivo := range arquivos {
+		if arquivo.IsDir() {
+			continue
+		}
+		caminhoCompleto := filepath.Join(caminhoPasta, arquivo.Name())
+		bytesOriginais, err := os.ReadFile(caminhoCompleto)
 		if err != nil {
-			log.Printf("[Aviso B-REST] Arquivo ausente, pulando: %s", caminhoArquivo)
 			continue
 		}
 		bytesFiltrados, err := aplicarFiltrosImagemDicom(bytesOriginais, true, false, false)
 		if err != nil {
-			log.Printf("[Erro B-REST] Falha ao filtrar lote: %v", err)
 			continue
 		}
 		_ = enc.Encode(EnhanceResponse{
-			SliceID:      fmt.Sprintf("Fatia_Processada_%d", indice+1),
+			SliceID:      arquivo.Name(),
 			Index:        int32(indice + 1),
 			DataB64:      base64.StdEncoding.EncodeToString(bytesFiltrados),
 			ProcessingMs: 0.0,
@@ -275,20 +223,27 @@ func handleUploadExam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	idExame := uuid.New().String()
+	caminhoPasta := filepath.Join(DiretorioArquivos, idExame)
+	_ = os.MkdirAll(caminhoPasta, 0755)
+
 	recebidas := int32(0)
 	for _, fatia := range req.Slices {
 		dados, err := base64.StdEncoding.DecodeString(fatia.DataB64)
 		if err != nil {
-			log.Printf("[Aviso B-REST] base64 invalido em %s, pulando", fatia.SliceID)
 			continue
 		}
-		destino := fmt.Sprintf("%s/upload_fatia_%s.dcm", DiretorioArquivos, strings.TrimSuffix(fatia.SliceID, ".dcm"))
+		nomeArquivo := fmt.Sprintf("fatia_%d.dcm", fatia.Index)
+		if fatia.SliceID != "" {
+			nomeArquivo = fmt.Sprintf("%s.dcm", fatia.SliceID)
+		}
+		destino := filepath.Join(caminhoPasta, nomeArquivo)
 		_ = os.WriteFile(destino, dados, 0644)
 		recebidas++
 	}
 
 	escreverJSON(w, ExamSummary{
-		ExamID:      "Upload_Hospitalar_Registrado",
+		ExamID:      idExame,
 		TotalSlices: recebidas,
 		SlicesOk:    recebidas,
 		TotalMs:     0.0,
@@ -354,8 +309,6 @@ func main() {
 	if porta == "" {
 		porta = PortaPadrao
 	}
-
-	construirIndiceExames()
 
 	http.HandleFunc("/enhance", handleEnhance)
 	http.HandleFunc("/process-exam", handleProcessExam)
