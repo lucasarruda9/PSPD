@@ -158,15 +158,25 @@ REQUISICOES=500 CONCORRENCIA=50 bash benchmarks/run_benchmark.sh
 
 #### Kubernetes(Minikube)
 
-Para executar o benchmark com Minikube, você deve passar as URLs do gRPC e do servidor REST. Isso pode ser feito de duas formas:
+Para executar o benchmark com Minikube, você deve conectar o teste aos IPs isolados do cluster. Isso pode ser feito de três formas diferentes:
 
-* **Forma 1:**
-Passando as variáveis diretamente na linha de comando:
+* **Forma 1 (Expondo as portas com Port-Forward):**
+Se a rede do seu terminal não enxergar o IP interno do Minikube, você pode abrir **dois terminais auxiliares** e fazer um túnel direto para o seu `localhost`.
+No terminal 1: `kubectl port-forward service/modulo-p-gateway -n pspd 8000:8000`
+No terminal 2: `kubectl port-forward service/modulo-rest-mirror -n pspd 8001:8001`
+Em seguida, volte ao terminal principal e rode o script puro: `bash benchmarks/run_benchmark.sh`
 
-      GRPC_URL="url1" REST_URL="url2" bash benchmarks/run_benchmark.sh
+* **Forma 2 (Comando único em um terminal):**
+Em vez de abrir terminais extras, passe as variáveis e injete as URLs dinamicamente na mesma linha usando o Minikube:
+```bash
+GRPC_URL=$(minikube.exe service modulo-p-gateway -n pspd --url | head -n 1 | tr -d '\r') \
+REST_URL=$(minikube.exe service modulo-rest-mirror -n pspd --url | head -n 1 | tr -d '\r') \
+bash benchmarks/run_benchmark.sh
+```
+*(No Linux/Mac puro, use apenas `minikube` em vez de `minikube.exe`)*
 
-* **Forma 2:**
-Abra o arquivo de script .sh e altere diretamente a porta correspondente para apontar para o link das portas.
+* **Forma 3 (Modificando o script base):**
+Abra o arquivo `benchmarks/run_benchmark.sh` e altere manualmente as variáveis de URL no topo do arquivo para apontar para o IP e a porta que o minikube forneceu. Depois, rode o script normalmente.
 
 ### 3. Testes dos 4 tipos de chamada gRPC (Atividade B.1)
 
