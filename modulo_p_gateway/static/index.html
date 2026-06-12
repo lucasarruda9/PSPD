@@ -409,30 +409,28 @@
             </div>
         </div>
 
-        <!-- Server Streaming: etapas em tempo real -->
+        <!-- Bidirecional: stream ↔ stream em tempo real -->
         <div class="card">
             <div class="card-head">
-                <div class="cicon s">=&gt;</div>
+                <div class="cicon b">&lt;-&gt;</div>
                 <div>
-                    <div class="ctitle s">Server Streaming</div>
-                    <div class="csub">1 request → stream de etapas</div>
+                    <div class="ctitle b">Bidirecional</div>
+                    <div class="csub">stream ⇄ stream em tempo real</div>
                 </div>
                 <div class="cbadge b">Server B</div>
             </div>
             <div class="card-body">
-                <div style="margin-bottom:.85rem">
-                    <label style="font-size:.74rem;color:var(--text-dim);display:block;margin-bottom:.35rem">Exam ID (obtido no Client Streaming)</label>
-                    <input id="input-exam-id" type="text" placeholder="Cole o UUID retornado pelo upload..."
-                        style="width:100%;padding:.45rem .7rem;border-radius:var(--r);border:1px solid var(--border);
-                        background:var(--bg2);color:var(--text);font-family:'JetBrains Mono',monospace;
-                        font-size:.72rem;outline:none;transition:border-color .2s"
-                        onfocus="this.style.borderColor='var(--border-hi)'"
-                        onblur="this.style.borderColor='var(--border)'">
+                <div class="zone" id="zone-b">
+                    <input type="file" id="file-b" accept=".dcm" multiple>
+                    <div class="zone-ico">📁</div>
+                    <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
+                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
+                    <div class="zone-sel" id="sel-b"></div>
                 </div>
-                <button class="btn btn-s" id="btn-s" onclick="callServerStream()">
-                    <div class="spin"></div><span class="lbl">&gt; Executar Server Stream</span>
+                <button class="btn btn-b" id="btn-b" onclick="callBidi()">
+                    <div class="spin"></div><span class="lbl">&gt; Executar Bidirecional</span>
                 </button>
-                <div class="res idle" id="res-s">Aguardando execução…</div>
+                <div class="res idle" id="res-b">Aguardando execução…</div>
             </div>
         </div>
 
@@ -461,28 +459,30 @@
             </div>
         </div>
 
-        <!-- Bidirecional: stream ↔ stream em tempo real -->
+        <!-- Server Streaming: etapas em tempo real -->
         <div class="card">
             <div class="card-head">
-                <div class="cicon b">&lt;-&gt;</div>
+                <div class="cicon s">=&gt;</div>
                 <div>
-                    <div class="ctitle b">Bidirecional</div>
-                    <div class="csub">stream ⇄ stream em tempo real</div>
+                    <div class="ctitle s">Server Streaming</div>
+                    <div class="csub">1 request → stream de etapas</div>
                 </div>
                 <div class="cbadge b">Server B</div>
             </div>
             <div class="card-body">
-                <div class="zone" id="zone-b">
-                    <input type="file" id="file-b" accept=".dcm" multiple>
-                    <div class="zone-ico">📁</div>
-                    <div class="zone-txt">Clique ou arraste múltiplas imagens</div>
-                    <div class="zone-hint">Apenas .DCM (DICOM)</div>
-                    <div class="zone-sel" id="sel-b"></div>
+                <div style="margin-bottom:.85rem">
+                    <label style="font-size:.74rem;color:var(--text-dim);display:block;margin-bottom:.35rem">Exam ID (obtido no Client Streaming)</label>
+                    <input id="input-exam-id" type="text" placeholder="Cole o UUID retornado pelo upload..."
+                        style="width:100%;padding:.45rem .7rem;border-radius:var(--r);border:1px solid var(--border);
+                        background:var(--bg2);color:var(--text);font-family:'JetBrains Mono',monospace;
+                        font-size:.72rem;outline:none;transition:border-color .2s"
+                        onfocus="this.style.borderColor='var(--border-hi)'"
+                        onblur="this.style.borderColor='var(--border)'">
                 </div>
-                <button class="btn btn-b" id="btn-b" onclick="callBidi()">
-                    <div class="spin"></div><span class="lbl">&gt; Executar Bidirecional</span>
+                <button class="btn btn-s" id="btn-s" onclick="callServerStream()">
+                    <div class="spin"></div><span class="lbl">&gt; Executar Server Stream</span>
                 </button>
-                <div class="res idle" id="res-b">Aguardando execução…</div>
+                <div class="res idle" id="res-s">Aguardando execução…</div>
             </div>
         </div>
 

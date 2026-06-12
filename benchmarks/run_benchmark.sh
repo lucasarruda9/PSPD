@@ -6,13 +6,15 @@ GRPC_URL="${GRPC_URL:-http://localhost:8000}"
 REST_URL="${REST_URL:-http://localhost:8001}"
 REQUISICOES="${REQUISICOES:-200}"
 CONCORRENCIA="${CONCORRENCIA:-20}"
-N_SLICES="${N_SLICES:-3}"   
+N_SLICES="${N_SLICES:-3}"
+EXAM_ID="${EXAM_ID:-}"   # exame (pasta) usado no server-stream; default detecta abaixo
 
 AMOSTRA="$DIR/amostra.dcm"
 DATASET="$DIR/dataset"
 RESULTADOS="$DIR/resultados"
 CORPO_UNICO="$DIR/.corpo_unico.bin"
 CORPO_MULTI="$DIR/.corpo_multi.bin"
+CORPO_JSON="$DIR/.corpo_json.bin"
 BOUNDARY="----pspdbench$$"
 
 command -v curl >/dev/null || { echo "ERRO: 'curl' nao instalado"; exit 1; }
@@ -34,7 +36,7 @@ if [ ! -f "$AMOSTRA" ]; then
     uv run --with pydicom --with numpy "$DIR/gerar_amostra_dicom.py" "$AMOSTRA"
 fi
 
-# Corpo multipart com 1 arquivo (campo 'arquivo') -> unary e server-stream
+# Corpo multipart com 1 arquivo (campo 'arquivo') -> unary
 {
     printf -- '--%s\r\n' "$BOUNDARY"
     printf 'Content-Disposition: form-data; name="arquivo"; filename="amostra.dcm"\r\n'
@@ -59,25 +61,38 @@ fi
     printf -- '--%s--\r\n' "$BOUNDARY"
 } > "$CORPO_MULTI"
 
+# Corpo JSON com um exam_id existente -> server-stream processa o exame (uma pasta)
+if [ -z "$EXAM_ID" ]; then
+    if [ -d "$DATASET/serie01" ]; then
+        EXAM_ID="serie01"
+    else
+        EXAM_ID="$(find "$DATASET" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort | head -1)"
+    fi
+    [ -z "$EXAM_ID" ] && EXAM_ID="serie01"
+fi
+printf '{"exam_id":"%s"}' "$EXAM_ID" > "$CORPO_JSON"
+
+# nome|rota|corpo|content-type
+MULTI_CT="multipart/form-data; boundary=$BOUNDARY"
 ENDPOINTS=(
-    "unary|/api/unary/processar-imagem|$CORPO_UNICO"
-    "server_stream|/api/server-stream/processar-etapas|$CORPO_UNICO"
-    "client_stream|/api/client-stream/processar-lote|$CORPO_MULTI"
-    "bidirecional|/api/bidirecional/preview-ao-vivo|$CORPO_MULTI"
+    "unary|/api/unary/processar-imagem|$CORPO_UNICO|$MULTI_CT"
+    "server_stream|/api/server-stream/processar-etapas|$CORPO_JSON|application/json"
+    "client_stream|/api/client-stream/processar-lote|$CORPO_MULTI|$MULTI_CT"
+    "bidirecional|/api/bidirecional/preview-ao-vivo|$CORPO_MULTI|$MULTI_CT"
 )
 
 # Dispara a carga de um endpoint contra um alvo
 rodar() {
-    local versao="$1" base="$2" ep="$3" path="$4" corpo="$5"
+    local versao="$1" base="$2" ep="$3" path="$4" corpo="$5" ctype="$6"
     local out="$RESULTADOS/${versao}_${ep}.txt"
     if [ "$FERRAMENTA" = "hey" ]; then
         hey -n "$REQUISICOES" -c "$CONCORRENCIA" -m POST \
-            -T "multipart/form-data; boundary=$BOUNDARY" -D "$corpo" \
-            "$base$path" > "$out" 2>&1
+            -T "$ctype" -D "$corpo" \
+            "$base$path" > "$out" 2>&1 || true
     else
         ab -n "$REQUISICOES" -c "$CONCORRENCIA" \
-            -T "multipart/form-data; boundary=$BOUNDARY" -p "$corpo" \
-            "$base$path" > "$out" 2>&1
+            -T "$ctype" -p "$corpo" \
+            "$base$path" > "$out" 2>&1 || true
     fi
 }
 
@@ -89,10 +104,10 @@ no_ar "$GRPC_URL" && TEM_GRPC=1 || echo "  AVISO  gRPC ($GRPC_URL) indisponivel.
 no_ar "$REST_URL" && TEM_REST=1 || echo "  AVISO  REST ($REST_URL) indisponivel."
 
 for item in "${ENDPOINTS[@]}"; do
-    IFS='|' read -r ep path corpo <<< "$item"
+    IFS='|' read -r ep path corpo ctype <<< "$item"
     echo "  -> $ep ($REQUISICOES req, conc. $CONCORRENCIA)"
-    [ "$TEM_GRPC" = 1 ] && rodar "grpc" "$GRPC_URL" "$ep" "$path" "$corpo"
-    [ "$TEM_REST" = 1 ] && rodar "rest" "$REST_URL" "$ep" "$path" "$corpo"
+    [ "$TEM_GRPC" = 1 ] && rodar "grpc" "$GRPC_URL" "$ep" "$path" "$corpo" "$ctype"
+    [ "$TEM_REST" = 1 ] && rodar "rest" "$REST_URL" "$ep" "$path" "$corpo" "$ctype"
 done
 
 # Extrai metricas do relatorio
@@ -123,7 +138,7 @@ TABELA="$RESULTADOS/comparativo.md"
     echo "| Endpoint | Versao | Req/s | Media ($UNIDADE) | p99 ($UNIDADE) |"
     echo "|----------|--------|-------|------------------|----------------|"
     for item in "${ENDPOINTS[@]}"; do
-        IFS='|' read -r ep _ _ <<< "$item"
+        IFS='|' read -r ep _ _ _ <<< "$item"
         [ "$TEM_GRPC" = 1 ] && linha "$ep" "grpc"
         [ "$TEM_REST" = 1 ] && linha "$ep" "rest"
     done
@@ -133,4 +148,4 @@ echo
 cat "$TABELA"
 echo
 echo "Resultados brutos em: $RESULTADOS/"
-rm -f "$CORPO_UNICO" "$CORPO_MULTI"
+rm -f "$CORPO_UNICO" "$CORPO_MULTI" "$CORPO_JSON"
