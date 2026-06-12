@@ -8,5 +8,6 @@ RUN go mod tidy && go build -o servidor_b_rest ./servidor_b
 FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/servidor_b_rest .
+COPY benchmarks/dataset /app/dataset
 EXPOSE 9002
 CMD ["./servidor_b_rest"]
